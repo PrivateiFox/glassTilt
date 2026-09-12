@@ -1421,6 +1421,9 @@
     glassGroup.position.set(0, 0.0, 0); // Sits on top of table surface
     tableGroup.add(glassGroup);
 
+    const glassPivot = new THREE.Group();
+    glassGroup.add(glassPivot);
+
     function createGlassLatheGeometry() {
       const g = SIM.glass;
       const points = [];
@@ -1470,7 +1473,7 @@
     const glassMesh = new THREE.Mesh(glassGeometry, glassMaterial);
     glassMesh.castShadow = true;
     glassMesh.receiveShadow = true;
-    glassGroup.add(glassMesh);
+    glassPivot.add(glassMesh);
 
     // --- 3. Dynamic Water Volume Mesh ---
     // A fully dynamic, watertight liquid mesh that shifts, sloshes, and ripples
@@ -1559,11 +1562,11 @@
     const waterMesh = new THREE.Mesh(waterGeometry, waterMaterial);
     waterMesh.castShadow = false;
     waterMesh.receiveShadow = true;
-    glassGroup.add(waterMesh);
+    glassPivot.add(waterMesh);
 
     // --- 4. Floating Ice Cubes ---
     const iceGroup = new THREE.Group();
-    glassGroup.add(iceGroup);
+    glassPivot.add(iceGroup);
 
     const iceMaterial = new THREE.MeshPhysicalMaterial({
       color: 0xe0f2fe,
@@ -1772,119 +1775,125 @@
       document.getElementById('label-fill-pct').textContent = Math.round(SIM.fillFraction * 100) + '%';
 
       // 4. Deform Dynamic Water Geometry
-      const posAttr = waterGeometry.attributes.position;
-      const positions = posAttr.array;
+      if (SIM.isToppled || SIM.fillFraction <= 0.01) {
+        waterMesh.visible = false;
+        iceGroup.visible = false;
+      } else {
+        waterMesh.visible = true;
+        const posAttr = waterGeometry.attributes.position;
+        const positions = posAttr.array;
 
-      // Helper function to get wall height at azimuth angle phi
-      function getSurfaceHeight(r, cosP, sinP) {
-        const x = r * cosP;
-        const z = r * sinP;
-        // Plane equation: ny * (y - centerHeight) + nz * z = 0 => y = centerHeight - (nz * z) / ny
-        let y = centerHeight - (nz * z) / (ny + 0.00001);
-        
-        // Add dynamic sloshing ripple waves
-        if (SIM.hasSlosh && SIM.waterRippleAmp > 0.001) {
-          const wave = Math.sin(r * 8.0 - SIM.waterRipplePhase) * Math.cos(sinP * 2.0);
-          y += wave * SIM.waterRippleAmp;
+        // Helper function to get wall height at azimuth angle phi
+        function getSurfaceHeight(r, cosP, sinP) {
+          const x = r * cosP;
+          const z = r * sinP;
+          // Plane equation: ny * (y - centerHeight) + nz * z = 0 => y = centerHeight - (nz * z) / ny
+          let y = centerHeight - (nz * z) / (ny + 0.00001);
+          
+          // Add dynamic sloshing ripple waves
+          if (SIM.hasSlosh && SIM.waterRippleAmp > 0.001) {
+            const wave = Math.sin(r * 8.0 - SIM.waterRipplePhase) * Math.cos(sinP * 2.0);
+            y += wave * SIM.waterRippleAmp;
+          }
+
+          // Clamp inside physical glass cavity
+          return THREE.MathUtils.clamp(y, g.floorY, g.rimY);
         }
 
-        // Clamp inside physical glass cavity
-        return THREE.MathUtils.clamp(y, g.floorY, g.rimY);
-      }
+        // Helper for inner radius at height y
+        function getInnerRadius(y) {
+          const t = THREE.MathUtils.clamp((y - g.floorY) / cavityHeight, 0.0, 1.0);
+          return THREE.MathUtils.lerp(g.innerBotRadius, g.innerTopRadius, t);
+        }
 
-      // Helper for inner radius at height y
-      function getInnerRadius(y) {
-        const t = THREE.MathUtils.clamp((y - g.floorY) / cavityHeight, 0.0, 1.0);
-        return THREE.MathUtils.lerp(g.innerBotRadius, g.innerTopRadius, t);
-      }
+        // A. Center vertex of top surface (idx = 0)
+        let ptr = 0;
+        positions[ptr++] = 0;
+        positions[ptr++] = getSurfaceHeight(0, 0, 0);
+        positions[ptr++] = 0;
 
-      // A. Center vertex of top surface (idx = 0)
-      let ptr = 0;
-      positions[ptr++] = 0;
-      positions[ptr++] = getSurfaceHeight(0, 0, 0);
-      positions[ptr++] = 0;
+        // B. Concentric rings of top water surface
+        for (let r = 1; r <= WATER_RINGS; r++) {
+          const rNorm = r / WATER_RINGS;
+          for (let s = 0; s < WATER_SEGS; s++) {
+            const phi = (s / WATER_SEGS) * Math.PI * 2;
+            const cosP = Math.cos(phi);
+            const sinP = Math.sin(phi);
 
-      // B. Concentric rings of top water surface
-      for (let r = 1; r <= WATER_RINGS; r++) {
-        const rNorm = r / WATER_RINGS;
+            // Get wall height at this angle first to determine exact perimeter radius
+            const yWallEst = getSurfaceHeight(R_water, cosP, sinP);
+            const radAtY = getInnerRadius(yWallEst) * rNorm;
+
+            const ySurf = getSurfaceHeight(radAtY, cosP, sinP);
+            positions[ptr++] = radAtY * cosP;
+            positions[ptr++] = ySurf;
+            positions[ptr++] = radAtY * sinP;
+          }
+        }
+
+        // C. Bottom floor center vertex
+        positions[ptr++] = 0;
+        positions[ptr++] = g.floorY;
+        positions[ptr++] = 0;
+
+        // D. Bottom floor rim vertices
+        for (let s = 0; s < WATER_SEGS; s++) {
+          const phi = (s / WATER_SEGS) * Math.PI * 2;
+          positions[ptr++] = g.innerBotRadius * Math.cos(phi);
+          positions[ptr++] = g.floorY;
+          positions[ptr++] = g.innerBotRadius * Math.sin(phi);
+        }
+
+        // E. Side Wall Vertices (interleaved top & bottom for each segment)
         for (let s = 0; s < WATER_SEGS; s++) {
           const phi = (s / WATER_SEGS) * Math.PI * 2;
           const cosP = Math.cos(phi);
           const sinP = Math.sin(phi);
 
-          // Get wall height at this angle first to determine exact perimeter radius
-          const yWallEst = getSurfaceHeight(R_water, cosP, sinP);
-          const radAtY = getInnerRadius(yWallEst) * rNorm;
+          // Top edge of wall meets water surface
+          const yTop = getSurfaceHeight(R_water, cosP, sinP);
+          const rTop = getInnerRadius(yTop);
 
-          const ySurf = getSurfaceHeight(radAtY, cosP, sinP);
-          positions[ptr++] = radAtY * cosP;
-          positions[ptr++] = ySurf;
-          positions[ptr++] = radAtY * sinP;
+          // Top vertex
+          positions[ptr++] = rTop * cosP;
+          positions[ptr++] = yTop;
+          positions[ptr++] = rTop * sinP;
+
+          // Bottom vertex
+          positions[ptr++] = g.innerBotRadius * cosP;
+          positions[ptr++] = g.floorY;
+          positions[ptr++] = g.innerBotRadius * sinP;
         }
-      }
 
-      // C. Bottom floor center vertex
-      positions[ptr++] = 0;
-      positions[ptr++] = g.floorY;
-      positions[ptr++] = 0;
+        posAttr.needsUpdate = true;
+        waterGeometry.computeVertexNormals();
 
-      // D. Bottom floor rim vertices
-      for (let s = 0; s < WATER_SEGS; s++) {
-        const phi = (s / WATER_SEGS) * Math.PI * 2;
-        positions[ptr++] = g.innerBotRadius * Math.cos(phi);
-        positions[ptr++] = g.floorY;
-        positions[ptr++] = g.innerBotRadius * Math.sin(phi);
-      }
+        // 5. Update Floating Ice Cubes
+        if (SIM.hasIce && SIM.fillFraction > 0.05) {
+          iceGroup.visible = true;
+          iceCubes.forEach((ice, i) => {
+            const cfg = ice.userData;
+            // Float with buoyancy
+            const iceR = Math.sqrt(cfg.x * cfg.x + cfg.z * cfg.z);
+            const cosP = cfg.x / (iceR + 0.0001);
+            const sinP = cfg.z / (iceR + 0.0001);
+            const waterH = getSurfaceHeight(iceR, cosP, sinP);
 
-      // E. Side Wall Vertices (interleaved top & bottom for each segment)
-      for (let s = 0; s < WATER_SEGS; s++) {
-        const phi = (s / WATER_SEGS) * Math.PI * 2;
-        const cosP = Math.cos(phi);
-        const sinP = Math.sin(phi);
+            // Submerged fraction (~80% underwater)
+            const targetY = Math.max(g.floorY + cfg.scale * 0.5, waterH - cfg.scale * 0.35);
 
-        // Top edge of wall meets water surface
-        const yTop = getSurfaceHeight(R_water, cosP, sinP);
-        const rTop = getInnerRadius(yTop);
+            // Gentle bobbing
+            cfg.bobPhase += dt * 3.5;
+            const bob = Math.sin(cfg.bobPhase) * 0.015;
 
-        // Top vertex
-        positions[ptr++] = rTop * cosP;
-        positions[ptr++] = yTop;
-        positions[ptr++] = rTop * sinP;
-
-        // Bottom vertex
-        positions[ptr++] = g.innerBotRadius * cosP;
-        positions[ptr++] = g.floorY;
-        positions[ptr++] = g.innerBotRadius * sinP;
-      }
-
-      posAttr.needsUpdate = true;
-      waterGeometry.computeVertexNormals();
-
-      // 5. Update Floating Ice Cubes
-      if (SIM.hasIce) {
-        iceGroup.visible = true;
-        iceCubes.forEach((ice, i) => {
-          const cfg = ice.userData;
-          // Float with buoyancy
-          const iceR = Math.sqrt(cfg.x * cfg.x + cfg.z * cfg.z);
-          const cosP = cfg.x / (iceR + 0.0001);
-          const sinP = cfg.z / (iceR + 0.0001);
-          const waterH = getSurfaceHeight(iceR, cosP, sinP);
-
-          // Submerged fraction (~80% underwater)
-          const targetY = Math.max(g.floorY + cfg.scale * 0.5, waterH - cfg.scale * 0.35);
-
-          // Gentle bobbing
-          cfg.bobPhase += dt * 3.5;
-          const bob = Math.sin(cfg.bobPhase) * 0.015;
-
-          ice.position.set(cfg.x, targetY + bob, cfg.z);
-          // Align ice cube orientation with tilted water surface normal
-          ice.rotation.x = -thetaRad + Math.sin(cfg.bobPhase * 0.8) * 0.05;
-          ice.rotation.y = cfg.rotY + Math.sin(cfg.bobPhase * 0.5) * 0.03;
-        });
-      } else {
-        iceGroup.visible = false;
+            ice.position.set(cfg.x, targetY + bob, cfg.z);
+            // Align ice cube orientation with tilted water surface normal
+            ice.rotation.x = -thetaRad + Math.sin(cfg.bobPhase * 0.8) * 0.05;
+            ice.rotation.y = cfg.rotY + Math.sin(cfg.bobPhase * 0.5) * 0.03;
+          });
+        } else {
+          iceGroup.visible = false;
+        }
       }
 
       // 6. Update Physics Visual Guides
@@ -1944,21 +1953,21 @@
         if (Math.abs(tiltRad) > tippingThreshold) {
           SIM.isToppled = true;
           const targetToppleAngle = Math.sign(tiltRad) * (Math.PI / 2);
-          glassMesh.rotation.x = THREE.MathUtils.lerp(glassMesh.rotation.x, targetToppleAngle, dt * 6.0);
-          glassMesh.position.y = Math.sin(Math.abs(glassMesh.rotation.x)) * g.outerBotRadius;
+          glassPivot.rotation.x = THREE.MathUtils.lerp(glassPivot.rotation.x, targetToppleAngle, dt * 6.0);
+          glassPivot.position.y = Math.sin(Math.abs(glassPivot.rotation.x)) * g.outerBotRadius;
 
-          // If toppled, liquid pours out rapidly
-          if (SIM.fillFraction > 0.01) {
-            const dumpRate = dt * 1.2;
+          // If toppled, liquid pours out rapidly from the rim
+          if (SIM.fillFraction > 0.005) {
+            const dumpRate = dt * 1.5;
             SIM.fillFraction = Math.max(0, SIM.fillFraction - dumpRate);
             SIM.currentVolumeMl = SIM.initialCapacityMl * SIM.fillFraction;
-            spawnSpillDroplet(Math.sign(tiltRad) * g.outerBotRadius, 0.2);
+            spawnSpillDroplet((tiltRad > 0 ? 1 : -1) * g.innerTopRadius, g.rimY);
             audio.playTrickle();
           }
         } else {
           SIM.isToppled = false;
-          glassMesh.rotation.x = THREE.MathUtils.lerp(glassMesh.rotation.x, 0, dt * 8.0);
-          glassMesh.position.y = THREE.MathUtils.lerp(glassMesh.position.y, 0, dt * 8.0);
+          glassPivot.rotation.x = THREE.MathUtils.lerp(glassPivot.rotation.x, 0, dt * 8.0);
+          glassPivot.position.y = THREE.MathUtils.lerp(glassPivot.position.y, 0, dt * 8.0);
         }
 
         // Bounds on table
@@ -1973,9 +1982,9 @@
         SIM.glassOffsetZ = 0.0;
         SIM.glassVelocityZ = 0.0;
         glassGroup.position.z = 0.0;
-        glassMesh.rotation.x = 0.0;
-        glassMesh.rotation.z = 0.0;
-        glassMesh.position.y = 0.0;
+        glassPivot.rotation.x = 0.0;
+        glassPivot.rotation.z = 0.0;
+        glassPivot.position.y = 0.0;
         SIM.isToppled = false;
       }
 
@@ -2355,10 +2364,12 @@
       SIM.glassOffsetZ = 0.0;
       SIM.glassVelocityZ = 0.0;
       glassGroup.position.z = 0.0;
-      glassMesh.rotation.x = 0.0;
-      glassMesh.rotation.z = 0.0;
-      glassMesh.position.y = 0.0;
+      glassPivot.rotation.x = 0.0;
+      glassPivot.rotation.z = 0.0;
+      glassPivot.position.y = 0.0;
       SIM.isToppled = false;
+      waterMesh.visible = true;
+      if (SIM.hasIce) iceGroup.visible = true;
       // Induce pleasant refill slosh
       SIM.waterVelocity += 1.2;
     }
@@ -2392,9 +2403,9 @@
         SIM.glassOffsetZ = 0.0;
         SIM.glassVelocityZ = 0.0;
         glassGroup.position.z = 0.0;
-        glassMesh.rotation.x = 0.0;
-        glassMesh.rotation.z = 0.0;
-        glassMesh.position.y = 0.0;
+        glassPivot.rotation.x = 0.0;
+        glassPivot.rotation.z = 0.0;
+        glassPivot.position.y = 0.0;
         SIM.isToppled = false;
       }
     });

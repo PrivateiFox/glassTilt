@@ -1733,14 +1733,16 @@
       const comY = (waterMass * waterCenterY + glassMass * glassCenterY) / (waterMass + glassMass);
 
       // 3. Overflow & Spill Check
-      // Maximum water height on the rim at current tilt:
-      // y(z) = centerHeight - (nz * z) / ny
-      // At the lowest tilted rim point (z = -R_water):
-      const lowestRimZ = -R_water;
-      const highestWaterPoint = centerHeight - (nz * lowestRimZ) / (ny + 0.0001);
+      // Rim radius at the top
+      const spillRimZ = (nz <= 0 ? 1 : -1) * g.innerTopRadius;
+      // In local coordinates, water plane: y = centerHeight - (nz * z) / ny
+      // Along the rim at z = spillRimZ, the water reaches its maximum height:
+      const tiltRise = (Math.abs(nz) / Math.max(0.0001, ny)) * g.innerTopRadius;
+      const waveRise = (SIM.hasSlosh && SIM.waterRippleAmp > 0.001) ? SIM.waterRippleAmp : 0.0;
+      const highestWaterPoint = centerHeight + tiltRise + waveRise;
 
       // Critical spill threshold angle for current fill fraction
-      const maxAngleBeforeSpill = Math.atan2(g.rimY - centerHeight, R_water);
+      const maxAngleBeforeSpill = Math.atan2(Math.max(0, g.rimY - centerHeight), g.innerTopRadius);
       const criticalAngleDeg = Math.abs(THREE.MathUtils.radToDeg(maxAngleBeforeSpill));
       document.getElementById('stat-spill-limit').textContent = criticalAngleDeg.toFixed(1) + '°';
 
@@ -1748,14 +1750,17 @@
       if (highestWaterPoint > g.rimY && centerHeight > g.floorY + 0.1) {
         SIM.isSpilling = true;
         const overflowDist = highestWaterPoint - g.rimY;
-        // Spilling drains volume!
-        const drainAmount = overflowDist * dt * 0.28;
+        // Spilling drains volume realistically
+        const drainAmount = Math.min(overflowDist, dt * 0.75 * Math.max(0.25, overflowDist));
         centerHeight -= drainAmount;
         SIM.fillFraction = THREE.MathUtils.clamp((centerHeight - g.floorY) / cavityHeight, 0.05, 0.95);
         SIM.currentVolumeMl = SIM.initialCapacityMl * SIM.fillFraction;
 
-        // Spawn spill droplets!
-        spawnSpillDroplet(lowestRimZ, g.rimY);
+        // Spawn spill droplets on downhill side of rim!
+        spawnSpillDroplet(spillRimZ, g.rimY);
+        if (overflowDist > 0.15) {
+          spawnSpillDroplet(spillRimZ, g.rimY);
+        }
         audio.playTrickle();
       } else {
         SIM.isSpilling = false;
@@ -1996,7 +2001,7 @@
         hudStatus.className = 'status-badge danger';
         hudStatus.textContent = 'SPILLING!';
         surfaceState.textContent = 'Overflowing';
-      } else if (Math.abs(SIM.currentTiltAngle) > criticalAngleDeg - 4) {
+      } else if (highestWaterPoint > g.rimY - 0.12 || (Math.abs(SIM.currentTiltAngle) > criticalAngleDeg - 2.0 && Math.abs(SIM.currentTiltAngle) > 2.0)) {
         hudStatus.className = 'status-badge warning';
         hudStatus.textContent = 'NEAR SPILL';
         surfaceState.textContent = 'Brim Level';
@@ -2094,7 +2099,11 @@
       const u = (localX / (SIM.table.width * 0.9) + 0.5) * 512;
       const v = (localZ / (SIM.table.depth * 0.9) + 0.5) * 512;
 
-      puddleCtx.fillStyle = 'rgba(56, 189, 248, 0.45)';
+      const l = SIM.liquids[SIM.currentLiquid] || SIM.liquids.water;
+      const r = (l.color >> 16) & 255;
+      const g = (l.color >> 8) & 255;
+      const b = l.color & 255;
+      puddleCtx.fillStyle = `rgba(${r}, ${g}, ${b}, 0.55)`;
       puddleCtx.beginPath();
       const radius = 6 + Math.random() * 8;
       puddleCtx.arc(u, v, radius, 0, Math.PI * 2);
@@ -2307,6 +2316,9 @@
       waterMaterial.roughness = l.roughness;
       waterMaterial.ior = l.ior;
       waterMaterial.needsUpdate = true;
+      if (typeof dropletMat !== 'undefined') {
+        dropletMat.color.setHex(l.color);
+      }
     }
 
     if (sliderOpacity) {

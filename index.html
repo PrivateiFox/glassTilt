@@ -1,0 +1,2497 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Glass of Water on Tilting Desk - 3D Physics Simulation</title>
+  <!-- Three.js and OrbitControls -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+  <style>
+    :root {
+      --bg-gradient: radial-gradient(circle at 50% 30%, #1e2638 0%, #0d111a 100%);
+      --panel-bg: rgba(18, 24, 38, 0.75);
+      --panel-border: rgba(255, 255, 255, 0.12);
+      --panel-hover: rgba(255, 255, 255, 0.18);
+      --accent: #38bdf8;
+      --accent-glow: rgba(56, 189, 248, 0.35);
+      --accent-active: #0ea5e9;
+      --warning: #f59e0b;
+      --danger: #ef4444;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+      --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #0d111a;
+      font-family: var(--font-sans);
+      color: var(--text-main);
+    }
+
+    #webgl-canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 1;
+      outline: none;
+    }
+
+    /* Top Bar */
+    .top-nav {
+      position: absolute;
+      top: 16px;
+      left: 16px;
+      right: 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      z-index: 10;
+      pointer-events: none;
+    }
+
+    .brand-title {
+      pointer-events: auto;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      background: var(--panel-bg);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      padding: 8px 16px;
+      border-radius: 9999px;
+      border: 1px solid var(--panel-border);
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
+    }
+
+    .brand-icon {
+      font-size: 20px;
+      animation: pulse 2.5s infinite ease-in-out;
+    }
+
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.15); }
+    }
+
+    .brand-text h1 {
+      font-size: 15px;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+      color: #fff;
+    }
+
+    .brand-text p {
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    .top-actions {
+      pointer-events: auto;
+      display: flex;
+      gap: 8px;
+    }
+
+    .btn-icon {
+      background: var(--panel-bg);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid var(--panel-border);
+      color: var(--text-main);
+      padding: 8px 14px;
+      border-radius: 9999px;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+    }
+
+    .btn-icon:hover {
+      background: var(--panel-hover);
+      border-color: rgba(255, 255, 255, 0.25);
+      transform: translateY(-1px);
+    }
+
+    .btn-icon:active {
+      transform: translateY(0);
+    }
+
+    .btn-icon.active {
+      background: var(--accent);
+      color: #04101e;
+      border-color: var(--accent);
+      box-shadow: 0 0 16px var(--accent-glow);
+    }
+
+    /* Left HUD: Real-time Telemetry & Physics Stats */
+    .telemetry-card {
+      position: absolute;
+      top: 80px;
+      left: 16px;
+      z-index: 10;
+      background: var(--panel-bg);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid var(--panel-border);
+      border-radius: 16px;
+      padding: 14px 18px;
+      min-width: 230px;
+      box-shadow: 0 12px 36px rgba(0, 0, 0, 0.35);
+      pointer-events: auto;
+      transition: opacity 0.3s, transform 0.3s;
+    }
+
+    .telemetry-card.collapsed {
+      opacity: 0.5;
+      transform: translateX(-80%);
+    }
+
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      padding-bottom: 8px;
+    }
+
+    .card-title {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--text-muted);
+    }
+
+    .status-badge {
+      font-size: 11px;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 6px;
+      background: rgba(34, 197, 94, 0.15);
+      color: #4ade80;
+      border: 1px solid rgba(34, 197, 94, 0.3);
+      transition: all 0.25s ease;
+    }
+
+    .status-badge.warning {
+      background: rgba(245, 158, 11, 0.2);
+      color: #fbbf24;
+      border-color: rgba(245, 158, 11, 0.4);
+    }
+
+    .status-badge.danger {
+      background: rgba(239, 68, 68, 0.25);
+      color: #f87171;
+      border-color: rgba(239, 68, 68, 0.5);
+      animation: blink 0.8s infinite alternate;
+    }
+
+    @keyframes blink {
+      from { opacity: 0.8; }
+      to { opacity: 1; filter: drop-shadow(0 0 6px rgba(239, 68, 68, 0.8)); }
+    }
+
+    .telemetry-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    .stat-item {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .stat-label {
+      font-size: 10px;
+      color: var(--text-muted);
+      margin-bottom: 2px;
+    }
+
+    .stat-value {
+      font-family: var(--font-mono);
+      font-size: 15px;
+      font-weight: 600;
+      color: #fff;
+    }
+
+    .stat-value.accent {
+      color: var(--accent);
+    }
+
+    /* Main Floating Control Dock (Right) */
+    .control-dock {
+      position: absolute;
+      top: 80px;
+      right: 16px;
+      bottom: 20px;
+      width: 320px;
+      max-height: calc(100vh - 100px);
+      z-index: 10;
+      background: var(--panel-bg);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid var(--panel-border);
+      border-radius: 20px;
+      padding: 18px;
+      box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45);
+      overflow-y: auto;
+      pointer-events: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+
+    /* Custom Scrollbar */
+    .control-dock::-webkit-scrollbar {
+      width: 5px;
+    }
+    .control-dock::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.2);
+      border-radius: 4px;
+    }
+
+    .section-title {
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-muted);
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    /* Tilt Angle Dial / Hero Slider */
+    .tilt-hero-box {
+      background: rgba(0, 0, 0, 0.3);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 16px;
+      padding: 14px;
+      text-align: center;
+      position: relative;
+    }
+
+    .tilt-display-number {
+      font-family: var(--font-mono);
+      font-size: 38px;
+      font-weight: 700;
+      color: #fff;
+      letter-spacing: -0.03em;
+      line-height: 1;
+      margin: 4px 0 2px 0;
+      text-shadow: 0 0 24px var(--accent-glow);
+    }
+
+    .tilt-display-unit {
+      font-size: 20px;
+      color: var(--accent);
+    }
+
+    .tilt-display-sub {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-bottom: 12px;
+    }
+
+    /* Interactive Protractor Arc Canvas */
+    .protractor-container {
+      width: 100%;
+      height: 70px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      margin-bottom: 6px;
+      cursor: ew-resize;
+    }
+
+    #protractor-canvas {
+      width: 260px;
+      height: 70px;
+    }
+
+    /* Sliders */
+    .slider-row {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin-bottom: 6px;
+    }
+
+    .slider-labels {
+      display: flex;
+      justify-content: space-between;
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    .custom-slider {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 100%;
+      height: 8px;
+      background: rgba(255, 255, 255, 0.12);
+      border-radius: 9999px;
+      outline: none;
+      transition: background 0.2s;
+      cursor: pointer;
+    }
+
+    .custom-slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: #fff;
+      border: 3px solid var(--accent);
+      box-shadow: 0 0 10px rgba(56, 189, 248, 0.7);
+      cursor: pointer;
+      transition: transform 0.15s, box-shadow 0.15s;
+    }
+
+    .custom-slider::-webkit-slider-thumb:hover {
+      transform: scale(1.18);
+      box-shadow: 0 0 16px rgba(56, 189, 248, 0.9);
+    }
+
+    /* Preset Angle Chips */
+    .chip-group {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 6px;
+      margin-top: 8px;
+    }
+
+    .btn-chip {
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      color: var(--text-main);
+      padding: 6px 0;
+      border-radius: 8px;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      text-align: center;
+    }
+
+    .btn-chip:hover {
+      background: rgba(255, 255, 255, 0.14);
+      border-color: rgba(255, 255, 255, 0.25);
+    }
+
+    .btn-chip.active {
+      background: var(--accent);
+      color: #04101e;
+      border-color: var(--accent);
+      box-shadow: 0 0 12px var(--accent-glow);
+    }
+
+    /* Fine step buttons */
+    .fine-step-row {
+      display: flex;
+      gap: 6px;
+      margin-top: 8px;
+    }
+
+    .btn-step {
+      flex: 1;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      color: var(--text-muted);
+      border-radius: 6px;
+      padding: 4px 0;
+      font-size: 11px;
+      font-family: var(--font-mono);
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .btn-step:hover {
+      background: rgba(255, 255, 255, 0.12);
+      color: #fff;
+    }
+
+    /* Liquid Type Pills */
+    .liquid-selector {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 6px;
+    }
+
+    .liquid-btn {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      padding: 8px 4px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 10px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .liquid-btn:hover {
+      background: rgba(255, 255, 255, 0.1);
+      border-color: rgba(255, 255, 255, 0.2);
+    }
+
+    .liquid-btn.active {
+      border-color: var(--accent);
+      background: rgba(56, 189, 248, 0.12);
+      box-shadow: 0 0 12px var(--accent-glow);
+    }
+
+    .liquid-swatch {
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      border: 1.5px solid rgba(255, 255, 255, 0.3);
+    }
+
+    .liquid-name {
+      font-size: 10px;
+      font-weight: 500;
+      color: var(--text-main);
+    }
+
+    /* Quick Action Buttons */
+    .action-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .btn-action {
+      background: rgba(255, 255, 255, 0.07);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      color: var(--text-main);
+      padding: 9px 12px;
+      border-radius: 10px;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      transition: all 0.2s;
+    }
+
+    .btn-action:hover {
+      background: rgba(255, 255, 255, 0.14);
+      border-color: rgba(255, 255, 255, 0.25);
+    }
+
+    .btn-action.highlight {
+      background: linear-gradient(135deg, #0ea5e9, #38bdf8);
+      color: #020617;
+      border: none;
+      font-weight: 600;
+      box-shadow: 0 4px 16px var(--accent-glow);
+    }
+
+    .btn-action.highlight:hover {
+      filter: brightness(1.1);
+      transform: translateY(-1px);
+    }
+
+    /* Toggles / Checkboxes */
+    .toggle-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 6px 0;
+    }
+
+    .toggle-label {
+      font-size: 12px;
+      color: var(--text-main);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .switch {
+      position: relative;
+      display: inline-block;
+      width: 38px;
+      height: 22px;
+    }
+
+    .switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+
+    .slider-toggle {
+      position: absolute;
+      cursor: pointer;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background-color: rgba(255, 255, 255, 0.15);
+      transition: 0.25s;
+      border-radius: 9999px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .slider-toggle:before {
+      position: absolute;
+      content: "";
+      height: 16px;
+      width: 16px;
+      left: 2px;
+      bottom: 2px;
+      background-color: white;
+      transition: 0.25s;
+      border-radius: 50%;
+    }
+
+    input:checked + .slider-toggle {
+      background-color: var(--accent);
+    }
+
+    input:checked + .slider-toggle:before {
+      transform: translateX(16px);
+      background-color: #04101e;
+    }
+
+    /* Viewpoint Switcher at Bottom Center */
+    .bottom-camera-dock {
+      position: absolute;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 10;
+      display: flex;
+      gap: 4px;
+      background: var(--panel-bg);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid var(--panel-border);
+      border-radius: 9999px;
+      padding: 4px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
+      pointer-events: auto;
+    }
+
+    .cam-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      padding: 8px 14px;
+      border-radius: 9999px;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      transition: all 0.2s;
+    }
+
+    .cam-btn:hover {
+      color: #fff;
+    }
+
+    .cam-btn.active {
+      background: rgba(255, 255, 255, 0.15);
+      color: #fff;
+    }
+
+    /* Interactive Desk Direct Grab Prompt */
+    .drag-hint {
+      position: absolute;
+      bottom: 74px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 9;
+      font-size: 11px;
+      font-weight: 500;
+      color: rgba(255, 255, 255, 0.6);
+      background: rgba(0, 0, 0, 0.4);
+      backdrop-filter: blur(8px);
+      padding: 5px 12px;
+      border-radius: 20px;
+      pointer-events: none;
+      letter-spacing: 0.02em;
+      transition: opacity 0.5s;
+    }
+
+    /* Mobile Responsive */
+    @media (max-width: 820px) {
+      .telemetry-card {
+        top: auto;
+        bottom: 80px;
+        left: 12px;
+        min-width: 170px;
+        padding: 10px;
+      }
+      .control-dock {
+        width: 290px;
+        top: 68px;
+        right: 10px;
+        padding: 14px;
+      }
+      .bottom-camera-dock {
+        bottom: 12px;
+        padding: 3px;
+      }
+      .cam-btn {
+        padding: 6px 10px;
+        font-size: 11px;
+      }
+      .drag-hint {
+        display: none;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- WebGL Canvas Container -->
+  <div id="webgl-canvas"></div>
+
+  <!-- Top Navigation Bar -->
+  <header class="top-nav">
+    <div class="brand-title">
+      <div class="brand-icon">💧</div>
+      <div class="brand-text">
+        <h1>Glass of Water on Tilting Desk</h1>
+        <p>Interactive Fluid & Gravitational Physics Simulation</p>
+      </div>
+    </div>
+    <div class="top-actions">
+      <button class="btn-icon" id="btn-audio" title="Toggle Slosh Sound Effects">
+        <span id="audio-icon">🔇</span> Sound
+      </button>
+      <button class="btn-icon" id="btn-nudge" title="Nudge or jar the desk (Spacebar)">
+        <span>💥</span> Bump Desk
+      </button>
+      <button class="btn-icon" id="btn-reset-desk" title="Return Desk to 0° Horizontal">
+        <span>🔄</span> Level 0°
+      </button>
+    </div>
+  </header>
+
+  <!-- Left HUD: Real-time Telemetry -->
+  <aside class="telemetry-card" id="telemetry-card">
+    <div class="card-header">
+      <span class="card-title">Live Physics Telemetry</span>
+      <span class="status-badge" id="hud-status">LEVEL</span>
+    </div>
+    <div class="telemetry-grid">
+      <div class="stat-item">
+        <span class="stat-label">Desk Tilt Angle</span>
+        <span class="stat-value accent" id="stat-desk-angle">0.0°</span>
+      </div>
+      <div class="stat-item">
+        <span class="stat-label">Water Angle (to Desk)</span>
+        <span class="stat-value" id="stat-water-angle">0.0°</span>
+      </div>
+      <div class="stat-item">
+        <span class="stat-label">Remaining Volume</span>
+        <span class="stat-value" id="stat-volume">250 ml</span>
+      </div>
+      <div class="stat-item">
+        <span class="stat-label">Spill Threshold</span>
+        <span class="stat-value" id="stat-spill-limit">37.8°</span>
+      </div>
+      <div class="stat-item">
+        <span class="stat-label">Slosh Acceleration</span>
+        <span class="stat-value" id="stat-slosh-g">1.00 G</span>
+      </div>
+      <div class="stat-item">
+        <span class="stat-label">Surface State</span>
+        <span class="stat-value" id="stat-surface-state">Calm</span>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Right Floating Control Panel -->
+  <main class="control-dock">
+    
+    <!-- Desk Tilt Angle Control -->
+    <div>
+      <div class="section-title">
+        <span>Desk Tilt Angle</span>
+        <span style="font-family: var(--font-mono); font-size: 11px; color: var(--accent);" id="label-tilt-axis">Pitch (X-Axis)</span>
+      </div>
+      
+      <div class="tilt-hero-box">
+        <div class="tilt-display-number">
+          <span id="display-angle-val">0.0</span><span class="tilt-display-unit">°</span>
+        </div>
+        <div class="tilt-display-sub" id="display-angle-desc">Table is perfectly horizontal</div>
+
+        <!-- Interactive Protractor Dial Canvas -->
+        <div class="protractor-container" id="protractor-container" title="Drag left/right to adjust angle">
+          <canvas id="protractor-canvas" width="260" height="70"></canvas>
+        </div>
+
+        <!-- Slider -->
+        <div class="slider-row">
+          <input type="range" class="custom-slider" id="slider-tilt" min="-60" max="60" step="0.1" value="0">
+          <div class="slider-labels">
+            <span>-60°</span>
+            <span>-30°</span>
+            <span>0° Level</span>
+            <span>+30°</span>
+            <span>+60°</span>
+          </div>
+        </div>
+
+        <!-- Step buttons -->
+        <div class="fine-step-row">
+          <button class="btn-step" id="btn-step-m5">-5°</button>
+          <button class="btn-step" id="btn-step-m1">-1°</button>
+          <button class="btn-step" id="btn-zero-tilt">0°</button>
+          <button class="btn-step" id="btn-step-p1">+1°</button>
+          <button class="btn-step" id="btn-step-p5">+5°</button>
+        </div>
+
+        <!-- Preset Chips -->
+        <div class="chip-group">
+          <button class="btn-chip active" data-angle="0">0° Flat</button>
+          <button class="btn-chip" data-angle="15">15° Gentle</button>
+          <button class="btn-chip" data-angle="32">32° Steep</button>
+          <button class="btn-chip" data-angle="45">45° Spill</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Liquid & Volume Controls -->
+    <div>
+      <div class="section-title">
+        <span>Liquid & Water Level</span>
+        <span id="label-fill-pct" style="font-family: var(--font-mono); font-size: 11px; color: var(--accent);">75%</span>
+      </div>
+      
+      <div class="slider-row">
+        <input type="range" class="custom-slider" id="slider-fill" min="15" max="95" step="1" value="75">
+        <div class="slider-labels">
+          <span>Low (15%)</span>
+          <span>Half (50%)</span>
+          <span>Full (95%)</span>
+        </div>
+      </div>
+
+      <!-- Liquid Selector -->
+      <div style="margin-top: 10px;">
+        <span class="stat-label" style="display:block; margin-bottom: 6px;">Liquid Type</span>
+        <div class="liquid-selector">
+          <div class="liquid-btn active" data-liquid="water">
+            <div class="liquid-swatch" style="background: linear-gradient(135deg, #0284c7, #0369a1);"></div>
+            <span class="liquid-name">Water</span>
+          </div>
+          <div class="liquid-btn" data-liquid="wine">
+            <div class="liquid-swatch" style="background: linear-gradient(135deg, #be123c, #881337);"></div>
+            <span class="liquid-name">Red Wine</span>
+          </div>
+          <div class="liquid-btn" data-liquid="coffee">
+            <div class="liquid-swatch" style="background: linear-gradient(135deg, #78350f, #451a03);"></div>
+            <span class="liquid-name">Iced Coffee</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Liquid Opacity Slider -->
+      <div style="margin-top: 12px;">
+        <div class="slider-row">
+          <div class="slider-labels">
+            <span class="stat-label">Liquid Opacity / Tint</span>
+            <span id="label-opacity-pct" style="font-family: var(--font-mono); font-size: 11px; color: var(--accent);">85%</span>
+          </div>
+          <input type="range" class="custom-slider" id="slider-opacity" min="10" max="100" step="1" value="85">
+          <div class="slider-labels">
+            <span>Clear (10%)</span>
+            <span>Semi (50%)</span>
+            <span>Opaque (100%)</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Table & Glass Physics -->
+    <div>
+      <div class="section-title">
+        <span>Simulation Options</span>
+      </div>
+
+      <div class="toggle-row">
+        <span class="toggle-label">🧊 Floating Ice Cubes</span>
+        <label class="switch">
+          <input type="checkbox" id="toggle-ice" checked>
+          <span class="slider-toggle"></span>
+        </label>
+      </div>
+
+      <div class="toggle-row">
+        <span class="toggle-label">🌊 Wave Sloshing Dynamics</span>
+        <label class="switch">
+          <input type="checkbox" id="toggle-slosh" checked>
+          <span class="slider-toggle"></span>
+        </label>
+      </div>
+
+      <div class="toggle-row">
+        <span class="toggle-label">📐 Show Gravitational Guides</span>
+        <label class="switch">
+          <input type="checkbox" id="toggle-helpers" checked>
+          <span class="slider-toggle"></span>
+        </label>
+      </div>
+
+      <div class="toggle-row">
+        <span class="toggle-label">🔄 Auto-Rock Table (Sine Wave)</span>
+        <label class="switch">
+          <input type="checkbox" id="toggle-rock">
+          <span class="slider-toggle"></span>
+        </label>
+      </div>
+
+      <div class="toggle-row">
+        <span class="toggle-label">⚖️ Real Friction / Glass Sliding</span>
+        <label class="switch">
+          <input type="checkbox" id="toggle-slide">
+          <span class="slider-toggle"></span>
+        </label>
+      </div>
+    </div>
+
+    <!-- Actions -->
+    <div class="action-grid">
+      <button class="btn-action highlight" id="btn-refill">
+        <span>🚰</span> Refill Glass
+      </button>
+      <button class="btn-action" id="btn-dry-table">
+        <span>🧽</span> Wipe Desk
+      </button>
+    </div>
+
+  </main>
+
+  <!-- Bottom Camera Viewpoint Toolbar -->
+  <nav class="bottom-camera-dock">
+    <button class="cam-btn active" data-cam="perspective">
+      <span>🎥</span> 3D Studio
+    </button>
+    <button class="cam-btn" data-cam="ortho-side">
+      <span>📐</span> Side View (Orthogonal)
+    </button>
+    <button class="cam-btn" data-cam="front">
+      <span>👁️</span> Front View
+    </button>
+    <button class="cam-btn" data-cam="top">
+      <span>🔝</span> Top Down
+    </button>
+    <button class="cam-btn" id="btn-recenter-cam" title="Reset Camera">
+      <span>🎯</span> Reset
+    </button>
+  </nav>
+
+  <div class="drag-hint">💡 Drag table or protractor to tilt • Left-click & drag background to rotate 3D view</div>
+
+  <!-- Main Simulation Script -->
+  <script>
+    /**
+     * Glass of Water on Tilting Desk - Comprehensive Physics & WebGL Simulation
+     * Developed with Three.js (r128)
+     */
+
+    // --- State Object ---
+    const SIM = {
+      // Desk Angle (degrees)
+      targetTiltAngle: 0.0,
+      currentTiltAngle: 0.0,
+      tiltAngularVelocity: 0.0,
+
+      // Water Slosh Physics (Spring-Damper system)
+      waterAngle: 0.0,          // Current angle of water surface relative to glass
+      waterVelocity: 0.0,       // Angular velocity of water slosh
+      waterRipplePhase: 0.0,
+      waterRippleAmp: 0.0,
+
+      // Fluid State
+      initialCapacityMl: 250,
+      currentVolumeMl: 187.5,   // 75% of 250ml
+      fillFraction: 0.75,       // 0.0 to 1.0 (of cavity)
+      isSpilling: false,
+      spillRate: 0.0,
+
+      // Physics settings
+      sloshDamping: 3.8,        // Damping factor for harmonic slosh
+      sloshFrequency: 8.5,      // Natural frequency of sloshing
+      liquidViscosity: 1.0,     // 1.0 for water, higher for wine/honey
+
+      // Liquid Presets & Opacity
+      currentLiquid: 'water',
+      liquidOpacity: 0.85,      // 0.10 (crystal clear) to 1.00 (completely opaque)
+      liquids: {
+        water: {
+          name: 'Pure Spring Water',
+          color: 0x0ea5e9,
+          roughness: 0.03,
+          ior: 1.333,
+          viscosity: 1.0,
+          damping: 3.8,
+          density: 1.0
+        },
+        wine: {
+          name: 'Cabernet Red Wine',
+          color: 0x9f1239,
+          roughness: 0.05,
+          ior: 1.35,
+          viscosity: 1.4,
+          damping: 4.6,
+          density: 1.02
+        },
+        coffee: {
+          name: 'Iced Cold Brew',
+          color: 0x3d1d07,
+          roughness: 0.08,
+          ior: 1.34,
+          viscosity: 1.3,
+          damping: 4.2,
+          density: 1.01
+        }
+      },
+
+      // Options
+      hasIce: true,
+      hasSlosh: true,
+      hasHelpers: true,
+      isAutoRocking: false,
+      isSlidePhysicsEnabled: false,
+      audioEnabled: false,
+
+      // Glass on desk physics
+      glassOffsetZ: 0.0,
+      glassVelocityZ: 0.0,
+      glassSlideAngle: 0.0,
+      isToppled: false,
+
+      // Dimension Constants (in 3D units)
+      glass: {
+        height: 3.2,
+        outerBotRadius: 0.95,
+        outerTopRadius: 1.15,
+        innerBotRadius: 0.84,
+        innerTopRadius: 1.04,
+        floorY: 0.35,          // Solid heavy base thickness
+        rimY: 3.2,             // Rim height in glass local coords
+        wallThickness: 0.11
+      },
+      table: {
+        width: 7.5,
+        depth: 5.5,
+        thickness: 0.28,
+        topY: 0.0              // Table surface rests at local y = 0
+      }
+    };
+
+    // --- Audio Synthesis (Web Audio API) ---
+    class AudioManager {
+      constructor() {
+        this.ctx = null;
+        this.isMuted = true;
+        this.sloshFilter = null;
+        this.sloshGain = null;
+        this.sloshNoise = null;
+        this.isSloshing = false;
+      }
+
+      init() {
+        if (this.ctx) return;
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        if (!AudioCtx) return;
+        this.ctx = new AudioCtx();
+
+        // Slosh noise loop
+        const bufferSize = this.ctx.sampleRate * 2;
+        const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        let lastOut = 0.0;
+        for (let i = 0; i < bufferSize; i++) {
+          const white = Math.random() * 2 - 1;
+          data[i] = (lastOut + (0.02 * white)) / 1.02; // Pink noise
+          lastOut = data[i];
+        }
+
+        this.sloshNoise = this.ctx.createBufferSource();
+        this.sloshNoise.buffer = buffer;
+        this.sloshNoise.loop = true;
+
+        this.sloshFilter = this.ctx.createBiquadFilter();
+        this.sloshFilter.type = 'bandpass';
+        this.sloshFilter.frequency.value = 450;
+        this.sloshFilter.Q.value = 2.0;
+
+        this.sloshGain = this.ctx.createGain();
+        this.sloshGain.gain.value = 0.0;
+
+        this.sloshNoise.connect(this.sloshFilter);
+        this.sloshFilter.connect(this.sloshGain);
+        this.sloshGain.connect(this.ctx.destination);
+        this.sloshNoise.start();
+      }
+
+      toggle() {
+        if (!this.ctx) this.init();
+        if (this.ctx && this.ctx.state === 'suspended') {
+          this.ctx.resume();
+        }
+        this.isMuted = !this.isMuted;
+        return !this.isMuted;
+      }
+
+      updateSlosh(intensity) {
+        if (this.isMuted || !this.sloshGain) return;
+        const targetVol = Math.min(0.35, intensity * 0.12);
+        this.sloshGain.gain.setTargetAtTime(targetVol, this.ctx.currentTime, 0.05);
+        this.sloshFilter.frequency.setTargetAtTime(300 + intensity * 600, this.ctx.currentTime, 0.05);
+      }
+
+      playBump() {
+        if (this.isMuted || !this.ctx) return;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(140, this.ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(35, this.ctx.currentTime + 0.25);
+        gain.gain.setValueAtTime(0.4, this.ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.25);
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start();
+        osc.stop(this.ctx.currentTime + 0.25);
+      }
+
+      playTrickle() {
+        if (this.isMuted || !this.ctx) return;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(800 + Math.random() * 400, this.ctx.currentTime);
+        gain.gain.setValueAtTime(0.08, this.ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.1);
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start();
+        osc.stop(this.ctx.currentTime + 0.1);
+      }
+    }
+    const audio = new AudioManager();
+
+    // --- Three.js Scene Setup ---
+    const container = document.getElementById('webgl-canvas');
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x0e131f);
+    scene.fog = new THREE.FogExp2(0x0e131f, 0.035);
+
+    // Renderer
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: 'high-performance' });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.15;
+    container.appendChild(renderer.domElement);
+
+    // Camera & Controls
+    const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
+    camera.position.set(0, 3.2, 7.8);
+
+    const controls = new THREE.OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.08;
+    controls.maxPolarAngle = Math.PI / 2 + 0.05; // Don't go deep below ground
+    controls.minDistance = 2.5;
+    controls.maxDistance = 18.0;
+    controls.target.set(0, 1.4, 0);
+
+    // Lighting
+    const ambientLight = new THREE.AmbientLight(0xdbeafe, 0.65);
+    scene.add(ambientLight);
+
+    // Main Studio Spotlight / Sun (with soft shadows)
+    const keyLight = new THREE.DirectionalLight(0xfff5ea, 1.6);
+    keyLight.position.set(4, 9, 5);
+    keyLight.castShadow = true;
+    keyLight.shadow.mapSize.width = 2048;
+    keyLight.shadow.mapSize.height = 2048;
+    keyLight.shadow.camera.near = 0.5;
+    keyLight.shadow.camera.far = 25;
+    keyLight.shadow.camera.left = -6;
+    keyLight.shadow.camera.right = 6;
+    keyLight.shadow.camera.top = 6;
+    keyLight.shadow.camera.bottom = -6;
+    keyLight.shadow.bias = -0.0004;
+    scene.add(keyLight);
+
+    // Cool Rim Light (accents the glass edges and refraction)
+    const rimLight = new THREE.DirectionalLight(0x38bdf8, 1.2);
+    rimLight.position.set(-6, 4, -4);
+    scene.add(rimLight);
+
+    // Soft Fill Light
+    const fillLight = new THREE.PointLight(0xffffff, 0.5, 15);
+    fillLight.position.set(0, 4, 3);
+    scene.add(fillLight);
+
+    // Floor Grid / Room Ground
+    const floorGeo = new THREE.PlaneGeometry(35, 35);
+    const floorMat = new THREE.MeshStandardMaterial({
+      color: 0x0a0e17,
+      roughness: 0.85,
+      metalness: 0.1
+    });
+    const floorMesh = new THREE.Mesh(floorGeo, floorMat);
+    floorMesh.rotation.x = -Math.PI / 2;
+    floorMesh.position.y = -2.8;
+    floorMesh.receiveShadow = true;
+    scene.add(floorMesh);
+
+    // Subtle Grid on Floor
+    const gridHelper = new THREE.GridHelper(30, 30, 0x1e293b, 0x141c2c);
+    gridHelper.position.y = -2.79;
+    scene.add(gridHelper);
+
+    // --- Hierarchy Setup ---
+    // World Center -> Desk Pivot Group (Tilts around X axis) -> Table Group -> Glass Group
+    const deskPivot = new THREE.Group();
+    deskPivot.position.set(0, 0.8, 0); // Elevation of table tilt axle
+    scene.add(deskPivot);
+
+    // 1. Table Top & Legs
+    const tableGroup = new THREE.Group();
+    deskPivot.add(tableGroup);
+
+    // Procedural Wood Grain Texture for Desk
+    function createWoodTexture() {
+      const canvas = document.createElement('canvas');
+      canvas.width = 1024;
+      canvas.height = 1024;
+      const ctx = canvas.getContext('2d');
+
+      // Base warm oak / walnut color
+      ctx.fillStyle = '#2c1e16';
+      ctx.fillRect(0, 0, 1024, 1024);
+
+      // Wood grain lines
+      for (let i = 0; i < 600; i++) {
+        const y = Math.random() * 1024;
+        const alpha = 0.03 + Math.random() * 0.08;
+        ctx.strokeStyle = Math.random() > 0.5 ? `rgba(215, 160, 110, ${alpha})` : `rgba(20, 10, 5, ${alpha})`;
+        ctx.lineWidth = 1 + Math.random() * 3;
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.bezierCurveTo(300, y + (Math.random() - 0.5) * 30, 700, y + (Math.random() - 0.5) * 30, 1024, y);
+        ctx.stroke();
+      }
+
+      // Satin sheen highlights
+      const grad = ctx.createLinearGradient(0, 0, 1024, 1024);
+      grad.addColorStop(0, 'rgba(255,255,255,0.05)');
+      grad.addColorStop(0.5, 'rgba(0,0,0,0.1)');
+      grad.addColorStop(1, 'rgba(255,255,255,0.02)');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, 1024, 1024);
+
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.wrapS = THREE.RepeatWrapping;
+      tex.wrapT = THREE.RepeatWrapping;
+      tex.repeat.set(1.5, 1);
+      return tex;
+    }
+
+    const woodTexture = createWoodTexture();
+
+    // Tabletop Mesh
+    const tableGeo = new THREE.BoxGeometry(SIM.table.width, SIM.table.thickness, SIM.table.depth, 4, 1, 4);
+    const tableMat = new THREE.MeshStandardMaterial({
+      map: woodTexture,
+      roughness: 0.35,
+      metalness: 0.08,
+      bumpMap: woodTexture,
+      bumpScale: 0.015
+    });
+    const tableTopMesh = new THREE.Mesh(tableGeo, tableMat);
+    tableTopMesh.position.y = -SIM.table.thickness / 2; // Top surface at y = 0
+    tableTopMesh.receiveShadow = true;
+    tableTopMesh.castShadow = true;
+    tableGroup.add(tableTopMesh);
+
+    // Beveled Edge Trim (Chrome / Brushed Aluminum edge)
+    const trimGeo = new THREE.BoxGeometry(SIM.table.width + 0.04, SIM.table.thickness * 0.6, SIM.table.depth + 0.04);
+    const trimMat = new THREE.MeshStandardMaterial({
+      color: 0x94a3b8,
+      metalness: 0.85,
+      roughness: 0.25
+    });
+    const trimMesh = new THREE.Mesh(trimGeo, trimMat);
+    trimMesh.position.y = -SIM.table.thickness / 2;
+    tableGroup.add(trimMesh);
+
+    // Desk Legs / Frame attached to the tilt mechanism
+    const legGeo = new THREE.CylinderGeometry(0.1, 0.08, 3.4, 16);
+    const legMat = new THREE.MeshStandardMaterial({
+      color: 0x1e293b,
+      metalness: 0.9,
+      roughness: 0.3
+    });
+
+    const legPositions = [
+      [-SIM.table.width / 2 + 0.5, -1.7 - SIM.table.thickness, -SIM.table.depth / 2 + 0.5],
+      [ SIM.table.width / 2 - 0.5, -1.7 - SIM.table.thickness, -SIM.table.depth / 2 + 0.5],
+      [-SIM.table.width / 2 + 0.5, -1.7 - SIM.table.thickness,  SIM.table.depth / 2 - 0.5],
+      [ SIM.table.width / 2 - 0.5, -1.7 - SIM.table.thickness,  SIM.table.depth / 2 - 0.5]
+    ];
+
+    legPositions.forEach(pos => {
+      const leg = new THREE.Mesh(legGeo, legMat);
+      leg.position.set(pos[0], pos[1], pos[2]);
+      leg.castShadow = true;
+      leg.receiveShadow = true;
+      tableGroup.add(leg);
+    });
+
+    // 3D Inclinometer / Angle Gauge on the Side of the Table
+    const protractorGroup = new THREE.Group();
+    protractorGroup.position.set(SIM.table.width / 2 + 0.05, -SIM.table.thickness / 2, 0);
+
+    // Gauge backplate
+    const gaugeBackGeo = new THREE.CylinderGeometry(1.2, 1.2, 0.03, 32, 1, false, -Math.PI / 2 - 1.1, 2.2);
+    const gaugeBackMat = new THREE.MeshStandardMaterial({
+      color: 0x1e293b,
+      metalness: 0.8,
+      roughness: 0.3,
+      side: THREE.DoubleSide
+    });
+    const gaugeBack = new THREE.Mesh(gaugeBackGeo, gaugeBackMat);
+    gaugeBack.rotation.z = Math.PI / 2;
+    protractorGroup.add(gaugeBack);
+
+    // Arc Border
+    const arcRadius = 1.18;
+    const arcCurve = new THREE.EllipseCurve(0, 0, arcRadius, arcRadius, -1.1, 1.1, false, 0);
+    const arcPoints = arcCurve.getPoints(40);
+    const arcGeo = new THREE.BufferGeometry().setFromPoints(arcPoints.map(p => new THREE.Vector3(0, -p.y, p.x)));
+    const arcMat = new THREE.LineBasicMaterial({ color: 0x38bdf8, linewidth: 2 });
+    const arcLine = new THREE.Line(arcGeo, arcMat);
+    protractorGroup.add(arcLine);
+
+    // Degree Ticks on 3D Inclinometer
+    const tickMat = new THREE.LineBasicMaterial({ color: 0x94a3b8 });
+    for (let deg = -60; deg <= 60; deg += 15) {
+      const rad = THREE.MathUtils.degToRad(deg);
+      const isMajor = deg === 0 || Math.abs(deg) === 30 || Math.abs(deg) === 60;
+      const r1 = arcRadius - (isMajor ? 0.22 : 0.12);
+      const r2 = arcRadius - 0.02;
+      const tickGeo = new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(0.01, -Math.cos(rad) * r1, Math.sin(rad) * r1),
+        new THREE.Vector3(0.01, -Math.cos(rad) * r2, Math.sin(rad) * r2)
+      ]);
+      const tickLine = new THREE.Line(tickGeo, isMajor ? new THREE.LineBasicMaterial({ color: 0xf8fafc }) : tickMat);
+      protractorGroup.add(tickLine);
+    }
+
+    // Weighted Plumb-Bob Needle (Points straight down under gravity)
+    const needlePivot = new THREE.Group();
+    needlePivot.position.set(0.03, 0, 0);
+
+    const needleStemGeo = new THREE.CylinderGeometry(0.012, 0.012, 1.05, 8);
+    needleStemGeo.translate(0, -0.52, 0);
+    const needleStemMat = new THREE.MeshStandardMaterial({ color: 0xf59e0b, metalness: 0.9, roughness: 0.2 });
+    const needleStem = new THREE.Mesh(needleStemGeo, needleStemMat);
+    needlePivot.add(needleStem);
+
+    // Plumb Bob Weight at bottom of needle
+    const bobGeo = new THREE.ConeGeometry(0.06, 0.14, 12);
+    bobGeo.translate(0, -1.06, 0);
+    const bobMesh = new THREE.Mesh(bobGeo, needleStemMat);
+    needlePivot.add(bobMesh);
+
+    // Pivot pin
+    const pinGeo = new THREE.CylinderGeometry(0.04, 0.04, 0.08, 16);
+    pinGeo.rotateZ(Math.PI / 2);
+    const pinMat = new THREE.MeshStandardMaterial({ color: 0x38bdf8, metalness: 0.9, roughness: 0.1 });
+    const pinMesh = new THREE.Mesh(pinGeo, pinMat);
+    needlePivot.add(pinMesh);
+
+    protractorGroup.add(needlePivot);
+    tableGroup.add(protractorGroup);
+
+    // Spilled Water Puddle on the Table Top
+    const puddleCanvas = document.createElement('canvas');
+    puddleCanvas.width = 512;
+    puddleCanvas.height = 512;
+    const puddleCtx = puddleCanvas.getContext('2d');
+    const puddleTex = new THREE.CanvasTexture(puddleCanvas);
+
+    function clearPuddleTexture() {
+      puddleCtx.clearRect(0, 0, 512, 512);
+      puddleTex.needsUpdate = true;
+    }
+    clearPuddleTexture();
+
+    const puddleGeo = new THREE.PlaneGeometry(SIM.table.width * 0.9, SIM.table.depth * 0.9);
+    const puddleMat = new THREE.MeshPhysicalMaterial({
+      map: puddleTex,
+      transparent: true,
+      roughness: 0.04,
+      transmission: 0.6,
+      color: 0x38bdf8,
+      depthWrite: false
+    });
+    const puddleMesh = new THREE.Mesh(puddleGeo, puddleMat);
+    puddleMesh.rotation.x = -Math.PI / 2;
+    puddleMesh.position.y = 0.002; // Just a hair above table surface
+    tableGroup.add(puddleMesh);
+
+    // --- 2. The Glass Container ---
+    // High-end glass tumbler with thick base and smooth curved rim
+    const glassGroup = new THREE.Group();
+    glassGroup.position.set(0, 0.0, 0); // Sits on top of table surface
+    tableGroup.add(glassGroup);
+
+    function createGlassLatheGeometry() {
+      const g = SIM.glass;
+      const points = [];
+
+      // Solid bottom outer base
+      points.push(new THREE.Vector2(0, 0));
+      points.push(new THREE.Vector2(g.outerBotRadius * 0.9, 0));
+      // Rounded outer bottom corner
+      points.push(new THREE.Vector2(g.outerBotRadius, 0.08));
+      // Outer side wall tapering upwards
+      points.push(new THREE.Vector2(g.outerTopRadius * 0.96, g.height * 0.5));
+      points.push(new THREE.Vector2(g.outerTopRadius, g.rimY));
+
+      // Rounded top rim
+      points.push(new THREE.Vector2(g.outerTopRadius - 0.04, g.rimY + 0.05));
+      points.push(new THREE.Vector2(g.innerTopRadius + 0.02, g.rimY + 0.04));
+      points.push(new THREE.Vector2(g.innerTopRadius, g.rimY));
+
+      // Inner wall going down into cavity
+      points.push(new THREE.Vector2(g.innerTopRadius * 0.97, g.height * 0.5));
+      points.push(new THREE.Vector2(g.innerBotRadius, g.floorY + 0.06));
+
+      // Inner rounded bottom floor
+      points.push(new THREE.Vector2(g.innerBotRadius * 0.9, g.floorY));
+      points.push(new THREE.Vector2(0, g.floorY));
+
+      return new THREE.LatheGeometry(points, 48);
+    }
+
+    const glassGeometry = createGlassLatheGeometry();
+    const glassMaterial = new THREE.MeshPhysicalMaterial({
+      color: 0xffffff,
+      transmission: 0.96,
+      opacity: 1.0,
+      transparent: true,
+      roughness: 0.04,
+      ior: 1.52,          // Real soda-lime glass refraction
+      thickness: 1.2,
+      specularIntensity: 1.0,
+      specularColor: 0xffffff,
+      envMapIntensity: 1.4,
+      clearcoat: 1.0,
+      clearcoatRoughness: 0.04,
+      depthWrite: false
+    });
+
+    const glassMesh = new THREE.Mesh(glassGeometry, glassMaterial);
+    glassMesh.castShadow = true;
+    glassMesh.receiveShadow = true;
+    glassGroup.add(glassMesh);
+
+    // --- 3. Dynamic Water Volume Mesh ---
+    // A fully dynamic, watertight liquid mesh that shifts, sloshes, and ripples
+    const WATER_SEGS = 48; // Radial segments
+    const WATER_RINGS = 6;  // Radial rings for top surface
+
+    function createWaterGeometry() {
+      const geo = new THREE.BufferGeometry();
+      
+      // Vertices count:
+      // Top surface: 1 center + WATER_SEGS * WATER_RINGS
+      // Bottom surface: 1 center + WATER_SEGS
+      // Side wall: WATER_SEGS * 2 (top wall rim and bottom floor rim)
+      const topVertCount = 1 + WATER_SEGS * WATER_RINGS;
+      const botVertCount = 1 + WATER_SEGS;
+      const wallVertCount = WATER_SEGS * 2;
+      const totalVerts = topVertCount + botVertCount + wallVertCount;
+
+      const positions = new Float32Array(totalVerts * 3);
+      const uvs = new Float32Array(totalVerts * 2);
+
+      // Build index list
+      const indices = [];
+
+      // 1. Top Surface Indices (Concentric rings)
+      // Center fan (ring 0)
+      for (let s = 0; s < WATER_SEGS; s++) {
+        const next = (s + 1) % WATER_SEGS;
+        indices.push(0, 1 + s, 1 + next);
+      }
+      // Outer rings
+      for (let r = 1; r < WATER_RINGS; r++) {
+        const r0 = 1 + (r - 1) * WATER_SEGS;
+        const r1 = 1 + r * WATER_SEGS;
+        for (let s = 0; s < WATER_SEGS; s++) {
+          const sNext = (s + 1) % WATER_SEGS;
+          const a = r0 + s;
+          const b = r0 + sNext;
+          const c = r1 + s;
+          const d = r1 + sNext;
+          indices.push(a, c, b);
+          indices.push(b, c, d);
+        }
+      }
+
+      // 2. Bottom Floor Indices (Triangle fan pointing down)
+      const botCenterIdx = topVertCount;
+      const botRimStart = botCenterIdx + 1;
+      for (let s = 0; s < WATER_SEGS; s++) {
+        const next = (s + 1) % WATER_SEGS;
+        indices.push(botCenterIdx, botRimStart + next, botRimStart + s);
+      }
+
+      // 3. Side Wall Indices
+      const wallStart = topVertCount + botVertCount;
+      for (let s = 0; s < WATER_SEGS; s++) {
+        const sNext = (s + 1) % WATER_SEGS;
+        const topCurrent = wallStart + s * 2;
+        const botCurrent = wallStart + s * 2 + 1;
+        const topNext    = wallStart + sNext * 2;
+        const botNext    = wallStart + sNext * 2 + 1;
+        indices.push(topCurrent, botCurrent, topNext);
+        indices.push(topNext, botCurrent, botNext);
+      }
+
+      geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+      geo.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
+      geo.setIndex(indices);
+      return geo;
+    }
+
+    const waterGeometry = createWaterGeometry();
+    const waterMaterial = new THREE.MeshPhysicalMaterial({
+      color: 0x0ea5e9,
+      transmission: 0.15,  // Opaque & rich by default (85% opacity)
+      opacity: 0.96,
+      transparent: true,
+      roughness: 0.04,
+      ior: 1.333,
+      thickness: 1.2,
+      specularIntensity: 0.95,
+      specularColor: 0xffffff,
+      depthWrite: false
+    });
+
+    const waterMesh = new THREE.Mesh(waterGeometry, waterMaterial);
+    waterMesh.castShadow = false;
+    waterMesh.receiveShadow = true;
+    glassGroup.add(waterMesh);
+
+    // --- 4. Floating Ice Cubes ---
+    const iceGroup = new THREE.Group();
+    glassGroup.add(iceGroup);
+
+    const iceMaterial = new THREE.MeshPhysicalMaterial({
+      color: 0xe0f2fe,
+      transmission: 0.88,
+      roughness: 0.18,
+      opacity: 0.9,
+      transparent: true,
+      ior: 1.31,
+      thickness: 0.4
+    });
+
+    const iceCubes = [];
+    const iceOffsets = [
+      { x: 0.22, z: 0.15, rotY: 0.4, scale: 0.38, seed: 1.2 },
+      { x: -0.26, z: -0.12, rotY: 1.8, scale: 0.35, seed: 3.4 },
+      { x: -0.05, z: 0.28, rotY: 2.7, scale: 0.32, seed: 5.1 }
+    ];
+
+    iceOffsets.forEach((cfg) => {
+      const iceGeo = new THREE.BoxGeometry(cfg.scale, cfg.scale, cfg.scale, 2, 2, 2);
+      const ice = new THREE.Mesh(iceGeo, iceMaterial);
+      ice.castShadow = true;
+      ice.receiveShadow = true;
+      ice.userData = { ...cfg, bobPhase: cfg.seed };
+      iceGroup.add(ice);
+      iceCubes.push(ice);
+    });
+
+    // --- 5. Droplet Particle System for Spilling ---
+    const MAX_DROPLETS = 80;
+    const dropletGeo = new THREE.SphereGeometry(0.04, 6, 6);
+    const dropletMat = new THREE.MeshStandardMaterial({
+      color: 0x38bdf8,
+      roughness: 0.1,
+      metalness: 0.2,
+      transparent: true,
+      opacity: 0.85
+    });
+
+    const dropletInstanced = new THREE.InstancedMesh(dropletGeo, dropletMat, MAX_DROPLETS);
+    dropletInstanced.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    scene.add(dropletInstanced);
+
+    const droplets = [];
+    const dummyObj = new THREE.Object3D();
+    for (let i = 0; i < MAX_DROPLETS; i++) {
+      droplets.push({
+        active: false,
+        pos: new THREE.Vector3(),
+        vel: new THREE.Vector3(),
+        life: 0,
+        maxLife: 1.2
+      });
+      dummyObj.position.set(0, -999, 0);
+      dummyObj.updateMatrix();
+      dropletInstanced.setMatrixAt(i, dummyObj.matrix);
+    }
+    dropletInstanced.instanceMatrix.needsUpdate = true;
+
+    // --- 6. Gravitational & Physics Visual Helpers ---
+    const helpersGroup = new THREE.Group();
+    scene.add(helpersGroup);
+
+    // True Earth Gravity Vector (Points straight down from center of glass)
+    const gravityArrow = new THREE.ArrowHelper(
+      new THREE.Vector3(0, -1, 0),
+      new THREE.Vector3(0, 2.0, 0),
+      1.6,
+      0xef4444, // Red
+      0.2,
+      0.12
+    );
+    helpersGroup.add(gravityArrow);
+
+    // Desk Normal Vector (Perpendicular to desk surface)
+    const normalArrow = new THREE.ArrowHelper(
+      new THREE.Vector3(0, 1, 0),
+      new THREE.Vector3(0, 0.8, 0),
+      1.6,
+      0x38bdf8, // Cyan
+      0.2,
+      0.12
+    );
+    helpersGroup.add(normalArrow);
+
+    // Center of Mass Marker (Gold sphere)
+    const comGeo = new THREE.SphereGeometry(0.08, 16, 16);
+    const comMat = new THREE.MeshBasicMaterial({ color: 0xf59e0b });
+    const comMarker = new THREE.Mesh(comGeo, comMat);
+    helpersGroup.add(comMarker);
+
+    // Horizontal Level Ring (shows the horizontal waterline plane)
+    const levelRingGeo = new THREE.RingGeometry(1.2, 1.25, 48);
+    const levelRingMat = new THREE.MeshBasicMaterial({
+      color: 0x22c55e,
+      side: THREE.DoubleSide,
+      transparent: true,
+      opacity: 0.7
+    });
+    const levelRing = new THREE.Mesh(levelRingGeo, levelRingMat);
+    levelRing.rotation.x = Math.PI / 2;
+    helpersGroup.add(levelRing);
+
+    // --- Mathematical Water Calculation & Update ---
+    /**
+     * Updates water mesh vertices according to current tilt angle, slosh, and volume
+     */
+    function updateWaterSimulation(dt) {
+      const g = SIM.glass;
+
+      // 1. Calculate Desk Angle & Water Slosh
+      // Target water angle in glass local coordinate frame is -deskAngle (seeking horizontal)
+      const targetWaterAngle = -SIM.currentTiltAngle;
+
+      if (SIM.hasSlosh) {
+        // 2nd-order damped oscillator
+        const angleDiff = SIM.waterAngle - targetWaterAngle;
+        const springForce = -SIM.sloshFrequency * SIM.sloshFrequency * angleDiff;
+        const dampingForce = -2.0 * SIM.sloshDamping * SIM.liquidViscosity * SIM.waterVelocity;
+        const angularAccel = springForce + dampingForce;
+
+        SIM.waterVelocity += angularAccel * dt;
+        SIM.waterAngle += SIM.waterVelocity * dt;
+
+        // Wave ripple amplitude driven by slosh velocity
+        SIM.waterRippleAmp = THREE.MathUtils.lerp(
+          SIM.waterRippleAmp,
+          Math.min(0.08, Math.abs(SIM.waterVelocity) * 0.035),
+          0.12
+        );
+        SIM.waterRipplePhase += dt * 14.0 * (1.0 / SIM.liquidViscosity);
+
+        // Sound update
+        if (Math.abs(SIM.waterVelocity) > 0.05) {
+          audio.updateSlosh(Math.abs(SIM.waterVelocity));
+        }
+      } else {
+        // Instantaneous calm liquid
+        SIM.waterAngle = targetWaterAngle;
+        SIM.waterVelocity = 0.0;
+        SIM.waterRippleAmp = 0.0;
+      }
+
+      // 2. Liquid Volume & Equilibrium Fill Height
+      const cavityHeight = g.rimY - g.floorY;
+      // Equilibrium water height at center of glass when upright
+      let centerHeight = g.floorY + SIM.fillFraction * cavityHeight;
+
+      // Normal vector of the water surface in glass local coordinates
+      // Glass tilts around Z axis in local space (or X axis depending on orientation)
+      // With pitch tilt around X axis: water normal tilts in Y-Z plane!
+      const thetaRad = THREE.MathUtils.degToRad(SIM.waterAngle);
+      const nx = 0.0;
+      const ny = Math.cos(thetaRad);
+      const nz = Math.sin(thetaRad); // Water tilts along Z axis in local coordinates
+
+      // Calculate inner radius at water level
+      const clampedCenterH = THREE.MathUtils.clamp(centerHeight, g.floorY, g.rimY);
+      const hNorm = (clampedCenterH - g.floorY) / cavityHeight;
+      const R_water = THREE.MathUtils.lerp(g.innerBotRadius, g.innerTopRadius, hNorm);
+
+      // Center of Mass (glass + liquid)
+      const waterMass = SIM.currentVolumeMl;
+      const glassMass = 350; // grams (solid thick base glass)
+      const waterCenterY = (g.floorY + centerHeight) * 0.5;
+      const glassCenterY = 1.3;
+      const comY = (waterMass * waterCenterY + glassMass * glassCenterY) / (waterMass + glassMass);
+
+      // 3. Overflow & Spill Check
+      // Maximum water height on the rim at current tilt:
+      // y(z) = centerHeight - (nz * z) / ny
+      // At the lowest tilted rim point (z = -R_water):
+      const lowestRimZ = -R_water;
+      const highestWaterPoint = centerHeight - (nz * lowestRimZ) / (ny + 0.0001);
+
+      // Critical spill threshold angle for current fill fraction
+      const maxAngleBeforeSpill = Math.atan2(g.rimY - centerHeight, R_water);
+      const criticalAngleDeg = Math.abs(THREE.MathUtils.radToDeg(maxAngleBeforeSpill));
+      document.getElementById('stat-spill-limit').textContent = criticalAngleDeg.toFixed(1) + '°';
+
+      // Spilling occurs when highest water point exceeds rim height
+      if (highestWaterPoint > g.rimY && centerHeight > g.floorY + 0.1) {
+        SIM.isSpilling = true;
+        const overflowDist = highestWaterPoint - g.rimY;
+        // Spilling drains volume!
+        const drainAmount = overflowDist * dt * 0.28;
+        centerHeight -= drainAmount;
+        SIM.fillFraction = THREE.MathUtils.clamp((centerHeight - g.floorY) / cavityHeight, 0.05, 0.95);
+        SIM.currentVolumeMl = SIM.initialCapacityMl * SIM.fillFraction;
+
+        // Spawn spill droplets!
+        spawnSpillDroplet(lowestRimZ, g.rimY);
+        audio.playTrickle();
+      } else {
+        SIM.isSpilling = false;
+      }
+
+      // Update volume HUD
+      document.getElementById('stat-volume').textContent = Math.round(SIM.currentVolumeMl) + ' ml';
+      document.getElementById('slider-fill').value = Math.round(SIM.fillFraction * 100);
+      document.getElementById('label-fill-pct').textContent = Math.round(SIM.fillFraction * 100) + '%';
+
+      // 4. Deform Dynamic Water Geometry
+      const posAttr = waterGeometry.attributes.position;
+      const positions = posAttr.array;
+
+      // Helper function to get wall height at azimuth angle phi
+      function getSurfaceHeight(r, cosP, sinP) {
+        const x = r * cosP;
+        const z = r * sinP;
+        // Plane equation: ny * (y - centerHeight) + nz * z = 0 => y = centerHeight - (nz * z) / ny
+        let y = centerHeight - (nz * z) / (ny + 0.00001);
+        
+        // Add dynamic sloshing ripple waves
+        if (SIM.hasSlosh && SIM.waterRippleAmp > 0.001) {
+          const wave = Math.sin(r * 8.0 - SIM.waterRipplePhase) * Math.cos(sinP * 2.0);
+          y += wave * SIM.waterRippleAmp;
+        }
+
+        // Clamp inside physical glass cavity
+        return THREE.MathUtils.clamp(y, g.floorY, g.rimY);
+      }
+
+      // Helper for inner radius at height y
+      function getInnerRadius(y) {
+        const t = THREE.MathUtils.clamp((y - g.floorY) / cavityHeight, 0.0, 1.0);
+        return THREE.MathUtils.lerp(g.innerBotRadius, g.innerTopRadius, t);
+      }
+
+      // A. Center vertex of top surface (idx = 0)
+      let ptr = 0;
+      positions[ptr++] = 0;
+      positions[ptr++] = getSurfaceHeight(0, 0, 0);
+      positions[ptr++] = 0;
+
+      // B. Concentric rings of top water surface
+      for (let r = 1; r <= WATER_RINGS; r++) {
+        const rNorm = r / WATER_RINGS;
+        for (let s = 0; s < WATER_SEGS; s++) {
+          const phi = (s / WATER_SEGS) * Math.PI * 2;
+          const cosP = Math.cos(phi);
+          const sinP = Math.sin(phi);
+
+          // Get wall height at this angle first to determine exact perimeter radius
+          const yWallEst = getSurfaceHeight(R_water, cosP, sinP);
+          const radAtY = getInnerRadius(yWallEst) * rNorm;
+
+          const ySurf = getSurfaceHeight(radAtY, cosP, sinP);
+          positions[ptr++] = radAtY * cosP;
+          positions[ptr++] = ySurf;
+          positions[ptr++] = radAtY * sinP;
+        }
+      }
+
+      // C. Bottom floor center vertex
+      positions[ptr++] = 0;
+      positions[ptr++] = g.floorY;
+      positions[ptr++] = 0;
+
+      // D. Bottom floor rim vertices
+      for (let s = 0; s < WATER_SEGS; s++) {
+        const phi = (s / WATER_SEGS) * Math.PI * 2;
+        positions[ptr++] = g.innerBotRadius * Math.cos(phi);
+        positions[ptr++] = g.floorY;
+        positions[ptr++] = g.innerBotRadius * Math.sin(phi);
+      }
+
+      // E. Side Wall Vertices (interleaved top & bottom for each segment)
+      for (let s = 0; s < WATER_SEGS; s++) {
+        const phi = (s / WATER_SEGS) * Math.PI * 2;
+        const cosP = Math.cos(phi);
+        const sinP = Math.sin(phi);
+
+        // Top edge of wall meets water surface
+        const yTop = getSurfaceHeight(R_water, cosP, sinP);
+        const rTop = getInnerRadius(yTop);
+
+        // Top vertex
+        positions[ptr++] = rTop * cosP;
+        positions[ptr++] = yTop;
+        positions[ptr++] = rTop * sinP;
+
+        // Bottom vertex
+        positions[ptr++] = g.innerBotRadius * cosP;
+        positions[ptr++] = g.floorY;
+        positions[ptr++] = g.innerBotRadius * sinP;
+      }
+
+      posAttr.needsUpdate = true;
+      waterGeometry.computeVertexNormals();
+
+      // 5. Update Floating Ice Cubes
+      if (SIM.hasIce) {
+        iceGroup.visible = true;
+        iceCubes.forEach((ice, i) => {
+          const cfg = ice.userData;
+          // Float with buoyancy
+          const iceR = Math.sqrt(cfg.x * cfg.x + cfg.z * cfg.z);
+          const cosP = cfg.x / (iceR + 0.0001);
+          const sinP = cfg.z / (iceR + 0.0001);
+          const waterH = getSurfaceHeight(iceR, cosP, sinP);
+
+          // Submerged fraction (~80% underwater)
+          const targetY = Math.max(g.floorY + cfg.scale * 0.5, waterH - cfg.scale * 0.35);
+
+          // Gentle bobbing
+          cfg.bobPhase += dt * 3.5;
+          const bob = Math.sin(cfg.bobPhase) * 0.015;
+
+          ice.position.set(cfg.x, targetY + bob, cfg.z);
+          // Align ice cube orientation with tilted water surface normal
+          ice.rotation.x = -thetaRad + Math.sin(cfg.bobPhase * 0.8) * 0.05;
+          ice.rotation.y = cfg.rotY + Math.sin(cfg.bobPhase * 0.5) * 0.03;
+        });
+      } else {
+        iceGroup.visible = false;
+      }
+
+      // 6. Update Physics Visual Guides
+      if (SIM.hasHelpers) {
+        helpersGroup.visible = true;
+
+        // Gravity vector originates from glass center in world coordinates
+        const glassWorldPos = new THREE.Vector3();
+        glassMesh.getWorldPosition(glassWorldPos);
+        glassWorldPos.y += 1.4;
+        gravityArrow.position.copy(glassWorldPos);
+
+        // Desk Normal Arrow
+        const deskWorldPos = new THREE.Vector3();
+        tableTopMesh.getWorldPosition(deskWorldPos);
+        normalArrow.position.copy(deskWorldPos);
+        // Point along table normal
+        const normalVec = new THREE.Vector3(0, 1, 0).applyAxisAngle(new THREE.Vector3(1, 0, 0), deskPivot.rotation.x);
+        normalArrow.setDirection(normalVec);
+
+        // Center of Mass (weighted average of glass + water)
+        const comWorldPos = new THREE.Vector3(0, comY, SIM.glassOffsetZ);
+        glassGroup.localToWorld(comWorldPos);
+        comMarker.position.copy(comWorldPos);
+
+        // Horizontal Water Level Guideline
+        levelRing.position.copy(glassWorldPos);
+        levelRing.position.y = glassWorldPos.y + (centerHeight - 1.4);
+      } else {
+        helpersGroup.visible = false;
+      }
+
+      // 7. Desk Tilt Friction / Glass Sliding Simulation
+      if (SIM.isSlidePhysicsEnabled) {
+        const tiltRad = deskPivot.rotation.x;
+        const mu_static = 0.38;  // Friction coefficient of glass on wood
+        const mu_kinetic = 0.28;
+        const sinTheta = Math.sin(tiltRad);
+        const cosTheta = Math.cos(tiltRad);
+
+        // If slope exceeds static friction, glass slides down table!
+        if (Math.abs(sinTheta) > mu_static * Math.abs(cosTheta)) {
+          const downhillDir = Math.sign(sinTheta);
+          const netAccel = 9.8 * (Math.abs(sinTheta) - mu_kinetic * Math.abs(cosTheta));
+          SIM.glassVelocityZ += downhillDir * netAccel * dt * 0.4;
+          SIM.glassOffsetZ += SIM.glassVelocityZ * dt;
+        } else {
+          // Friction halts motion
+          SIM.glassVelocityZ *= Math.max(0, 1.0 - dt * 6.0);
+          if (Math.abs(SIM.glassVelocityZ) < 0.001) SIM.glassVelocityZ = 0.0;
+        }
+
+        // Tipping Check: if Center of Mass falls outside base radius
+        const baseRadius = g.outerBotRadius;
+        const tippingThreshold = Math.atan2(baseRadius, comY);
+
+        if (Math.abs(tiltRad) > tippingThreshold) {
+          SIM.isToppled = true;
+          const targetToppleAngle = Math.sign(tiltRad) * (Math.PI / 2);
+          glassMesh.rotation.x = THREE.MathUtils.lerp(glassMesh.rotation.x, targetToppleAngle, dt * 6.0);
+          glassMesh.position.y = Math.sin(Math.abs(glassMesh.rotation.x)) * g.outerBotRadius;
+
+          // If toppled, liquid pours out rapidly
+          if (SIM.fillFraction > 0.01) {
+            const dumpRate = dt * 1.2;
+            SIM.fillFraction = Math.max(0, SIM.fillFraction - dumpRate);
+            SIM.currentVolumeMl = SIM.initialCapacityMl * SIM.fillFraction;
+            spawnSpillDroplet(Math.sign(tiltRad) * g.outerBotRadius, 0.2);
+            audio.playTrickle();
+          }
+        } else {
+          SIM.isToppled = false;
+          glassMesh.rotation.x = THREE.MathUtils.lerp(glassMesh.rotation.x, 0, dt * 8.0);
+          glassMesh.position.y = THREE.MathUtils.lerp(glassMesh.position.y, 0, dt * 8.0);
+        }
+
+        // Bounds on table
+        const maxSlideZ = SIM.table.depth / 2 - g.outerBotRadius - 0.1;
+        if (Math.abs(SIM.glassOffsetZ) > maxSlideZ) {
+          SIM.glassOffsetZ = Math.sign(SIM.glassOffsetZ) * maxSlideZ;
+          SIM.glassVelocityZ = 0;
+        }
+        glassGroup.position.z = SIM.glassOffsetZ;
+      } else {
+        // Affixed firmly in place on table
+        SIM.glassOffsetZ = 0.0;
+        SIM.glassVelocityZ = 0.0;
+        glassGroup.position.z = 0.0;
+        glassMesh.rotation.x = 0.0;
+        glassMesh.rotation.z = 0.0;
+        glassMesh.position.y = 0.0;
+        SIM.isToppled = false;
+      }
+
+      // 8. Update HUD Readouts
+      document.getElementById('stat-desk-angle').textContent = (SIM.currentTiltAngle > 0 ? '+' : '') + SIM.currentTiltAngle.toFixed(1) + '°';
+      document.getElementById('stat-water-angle').textContent = (SIM.waterAngle > 0 ? '+' : '') + SIM.waterAngle.toFixed(1) + '°';
+      
+      const accelG = (1.0 + Math.abs(SIM.waterVelocity) * 0.08).toFixed(2);
+      document.getElementById('stat-slosh-g').textContent = accelG + ' G';
+
+      const hudStatus = document.getElementById('hud-status');
+      const surfaceState = document.getElementById('stat-surface-state');
+
+      if (SIM.isToppled) {
+        hudStatus.className = 'status-badge danger';
+        hudStatus.textContent = 'TOPPLED!';
+        surfaceState.textContent = 'Fallen Over';
+      } else if (Math.abs(SIM.glassVelocityZ) > 0.05) {
+        hudStatus.className = 'status-badge warning';
+        hudStatus.textContent = 'SLIDING';
+        surfaceState.textContent = 'Sliding Down';
+      } else if (SIM.isSpilling) {
+        hudStatus.className = 'status-badge danger';
+        hudStatus.textContent = 'SPILLING!';
+        surfaceState.textContent = 'Overflowing';
+      } else if (Math.abs(SIM.currentTiltAngle) > criticalAngleDeg - 4) {
+        hudStatus.className = 'status-badge warning';
+        hudStatus.textContent = 'NEAR SPILL';
+        surfaceState.textContent = 'Brim Level';
+      } else if (Math.abs(SIM.waterVelocity) > 0.4) {
+        hudStatus.className = 'status-badge warning';
+        hudStatus.textContent = 'SLOSHING';
+        surfaceState.textContent = 'Oscillating';
+      } else if (Math.abs(SIM.currentTiltAngle) < 0.2) {
+        hudStatus.className = 'status-badge';
+        hudStatus.textContent = 'LEVEL';
+        surfaceState.textContent = 'Calm';
+      } else {
+        hudStatus.className = 'status-badge';
+        hudStatus.textContent = 'TILTING';
+        surfaceState.textContent = 'Equilibrium';
+      }
+    }
+
+    // --- Droplet Spawning & Puddle Generation ---
+    function spawnSpillDroplet(localZ, localY) {
+      for (let i = 0; i < droplets.length; i++) {
+        const d = droplets[i];
+        if (!d.active) {
+          d.active = true;
+          d.life = 0;
+          d.maxLife = 0.8 + Math.random() * 0.4;
+
+          // Droplet start position in world space
+          const rimPos = new THREE.Vector3(
+            (Math.random() - 0.5) * 0.3,
+            localY,
+            localZ
+          );
+          glassGroup.localToWorld(rimPos);
+          d.pos.copy(rimPos);
+
+          // Outward initial spill velocity
+          const outwardVel = new THREE.Vector3(0, 0.4, Math.sign(localZ) * 0.6)
+            .applyAxisAngle(new THREE.Vector3(1, 0, 0), deskPivot.rotation.x);
+          d.vel.copy(outwardVel);
+          break;
+        }
+      }
+    }
+
+    function updateDroplets(dt) {
+      let activeCount = 0;
+      const tableWorldY = deskPivot.position.y;
+
+      for (let i = 0; i < droplets.length; i++) {
+        const d = droplets[i];
+        if (d.active) {
+          activeCount++;
+          d.life += dt;
+          d.vel.y -= 9.8 * dt; // Earth Gravity
+          d.pos.addScaledVector(d.vel, dt);
+
+          // Check if droplet hits the tilted table surface
+          // Transform droplet position to table local coordinates
+          const localPos = tableGroup.worldToLocal(d.pos.clone());
+
+          if (localPos.y <= 0.05 && localPos.y >= -SIM.table.thickness) {
+            if (Math.abs(localPos.x) < SIM.table.width / 2 && Math.abs(localPos.z) < SIM.table.depth / 2) {
+              // Hit the table! Add puddle splat!
+              addPuddleSplat(localPos.x, localPos.z);
+              d.active = false;
+            }
+          }
+
+          if (d.life > d.maxLife || d.pos.y < -3.0) {
+            d.active = false;
+          }
+
+          if (d.active) {
+            dummyObj.position.copy(d.pos);
+            const scale = Math.max(0.01, 1.0 - d.life / d.maxLife);
+            dummyObj.scale.set(scale, scale, scale);
+            dummyObj.updateMatrix();
+            dropletInstanced.setMatrixAt(i, dummyObj.matrix);
+          } else {
+            dummyObj.position.set(0, -999, 0);
+            dummyObj.updateMatrix();
+            dropletInstanced.setMatrixAt(i, dummyObj.matrix);
+          }
+        }
+      }
+
+      if (activeCount > 0 || dropletInstanced.instanceMatrix.needsUpdate) {
+        dropletInstanced.instanceMatrix.needsUpdate = true;
+      }
+    }
+
+    function addPuddleSplat(localX, localZ) {
+      // Map local table coordinate to puddle canvas (512x512)
+      const u = (localX / (SIM.table.width * 0.9) + 0.5) * 512;
+      const v = (localZ / (SIM.table.depth * 0.9) + 0.5) * 512;
+
+      puddleCtx.fillStyle = 'rgba(56, 189, 248, 0.45)';
+      puddleCtx.beginPath();
+      const radius = 6 + Math.random() * 8;
+      puddleCtx.arc(u, v, radius, 0, Math.PI * 2);
+      puddleCtx.fill();
+
+      puddleTex.needsUpdate = true;
+    }
+
+    // --- Protractor Dial Canvas (2D HTML5 Canvas Gauge) ---
+    const protractorCanvas = document.getElementById('protractor-canvas');
+    const protractorCtx = protractorCanvas.getContext('2d');
+
+    function drawProtractorDial() {
+      const w = protractorCanvas.width;
+      const h = protractorCanvas.height;
+      const ctx = protractorCtx;
+      ctx.clearRect(0, 0, w, h);
+
+      const cx = w / 2;
+      const cy = h - 6;
+      const radius = 105;
+
+      // Arc background
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)';
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.arc(cx, cy, radius, Math.PI * 1.15, Math.PI * 1.85);
+      ctx.stroke();
+
+      // Degree tick marks from -60° to +60°
+      for (let deg = -60; deg <= 60; deg += 5) {
+        const rad = Math.PI * 1.5 + (deg * Math.PI / 180) * 0.9;
+        const isMajor = deg % 15 === 0;
+        const rInner = isMajor ? radius - 14 : radius - 7;
+        const rOuter = radius + 2;
+
+        const x1 = cx + Math.cos(rad) * rInner;
+        const y1 = cy + Math.sin(rad) * rInner;
+        const x2 = cx + Math.cos(rad) * rOuter;
+        const y2 = cy + Math.sin(rad) * rOuter;
+
+        ctx.strokeStyle = isMajor ? 'rgba(255,255,255,0.7)' : 'rgba(255,255,255,0.2)';
+        ctx.lineWidth = isMajor ? 1.5 : 1;
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+        ctx.stroke();
+
+        if (isMajor && deg !== -60 && deg !== 60) {
+          ctx.fillStyle = 'rgba(255,255,255,0.5)';
+          ctx.font = '9px monospace';
+          ctx.textAlign = 'center';
+          ctx.fillText(deg + '°', cx + Math.cos(rad) * (radius - 22), cy + Math.sin(rad) * (radius - 22) + 3);
+        }
+      }
+
+      // Needle for current desk angle
+      const curDeg = SIM.currentTiltAngle;
+      const needleRad = Math.PI * 1.5 + (curDeg * Math.PI / 180) * 0.9;
+      const nx = cx + Math.cos(needleRad) * (radius + 6);
+      const ny = cy + Math.sin(needleRad) * (radius + 6);
+
+      ctx.strokeStyle = '#38bdf8';
+      ctx.lineWidth = 3;
+      ctx.shadowColor = 'rgba(56, 189, 248, 0.8)';
+      ctx.shadowBlur = 8;
+      ctx.beginPath();
+      ctx.moveTo(cx, cy);
+      ctx.lineTo(nx, ny);
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+
+      // Center pivot jewel
+      ctx.fillStyle = '#fff';
+      ctx.beginPath();
+      ctx.arc(cx, cy, 4, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // --- Interactive Controls & Event Listeners ---
+    const sliderTilt = document.getElementById('slider-tilt');
+    const displayAngleVal = document.getElementById('display-angle-val');
+    const displayAngleDesc = document.getElementById('display-angle-desc');
+    const sliderFill = document.getElementById('slider-fill');
+
+    function setTargetAngle(deg, triggerHaptic = true) {
+      deg = THREE.MathUtils.clamp(parseFloat(deg), -60, 60);
+      SIM.targetTiltAngle = deg;
+      sliderTilt.value = deg.toFixed(1);
+
+      // Description
+      if (Math.abs(deg) < 0.5) {
+        displayAngleDesc.textContent = 'Table is perfectly horizontal';
+      } else if (Math.abs(deg) < 15) {
+        displayAngleDesc.textContent = 'Gentle incline; fluid level remains stable';
+      } else if (Math.abs(deg) < 32) {
+        displayAngleDesc.textContent = 'Steep slope; water climbs near the rim';
+      } else {
+        displayAngleDesc.textContent = 'Extreme tilt; fluid will spill past the brim!';
+      }
+
+      // Highlight active chip
+      document.querySelectorAll('.btn-chip').forEach(chip => {
+        const chipAngle = parseFloat(chip.dataset.angle);
+        if (Math.abs(chipAngle - Math.abs(deg)) < 0.5) {
+          chip.classList.add('active');
+        } else {
+          chip.classList.remove('active');
+        }
+      });
+    }
+
+    sliderTilt.addEventListener('input', (e) => {
+      setTargetAngle(e.target.value);
+    });
+
+    // Step buttons
+    document.getElementById('btn-step-m5').onclick = () => setTargetAngle(SIM.targetTiltAngle - 5);
+    document.getElementById('btn-step-m1').onclick = () => setTargetAngle(SIM.targetTiltAngle - 1);
+    document.getElementById('btn-zero-tilt').onclick = () => setTargetAngle(0);
+    document.getElementById('btn-step-p1').onclick = () => setTargetAngle(SIM.targetTiltAngle + 1);
+    document.getElementById('btn-step-p5').onclick = () => setTargetAngle(SIM.targetTiltAngle + 5);
+
+    // Preset Chips
+    document.querySelectorAll('.btn-chip').forEach(chip => {
+      chip.addEventListener('click', () => {
+        setTargetAngle(chip.dataset.angle);
+      });
+    });
+
+    // Level 0° Button in Top Nav
+    document.getElementById('btn-reset-desk').onclick = () => setTargetAngle(0);
+
+    // Bump / Nudge Desk Action
+    function bumpDesk() {
+      // Induce sudden impulse to water sloshing
+      SIM.waterVelocity += (Math.random() > 0.5 ? 1 : -1) * (2.2 + Math.random() * 2.0);
+      audio.playBump();
+
+      // Visual camera shake
+      const origY = camera.position.y;
+      camera.position.y += 0.08;
+      setTimeout(() => { camera.position.y = origY; }, 60);
+    }
+
+    document.getElementById('btn-nudge').onclick = bumpDesk;
+    window.addEventListener('keydown', (e) => {
+      if (e.code === 'Space') {
+        e.preventDefault();
+        bumpDesk();
+      } else if (e.code === 'ArrowLeft') {
+        setTargetAngle(SIM.targetTiltAngle - 2);
+      } else if (e.code === 'ArrowRight') {
+        setTargetAngle(SIM.targetTiltAngle + 2);
+      } else if (e.code === 'KeyR') {
+        refillGlass();
+      } else if (e.code === 'KeyC') {
+        clearPuddleTexture();
+      }
+    });
+
+    // Protractor Canvas Dragging
+    let isDraggingProtractor = false;
+    const protractorContainer = document.getElementById('protractor-container');
+
+    function handleProtractorEvent(e) {
+      const rect = protractorCanvas.getBoundingClientRect();
+      const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+      const x = clientX - rect.left;
+      const norm = (x / rect.width) * 2 - 1; // -1 to +1
+      setTargetAngle(norm * 60);
+    }
+
+    protractorContainer.addEventListener('mousedown', (e) => {
+      isDraggingProtractor = true;
+      handleProtractorEvent(e);
+    });
+    window.addEventListener('mousemove', (e) => {
+      if (isDraggingProtractor) handleProtractorEvent(e);
+    });
+    window.addEventListener('mouseup', () => { isDraggingProtractor = false; });
+    protractorContainer.addEventListener('touchstart', (e) => {
+      isDraggingProtractor = true;
+      handleProtractorEvent(e);
+    }, { passive: true });
+    protractorContainer.addEventListener('touchmove', (e) => {
+      if (isDraggingProtractor) handleProtractorEvent(e);
+    }, { passive: true });
+    protractorContainer.addEventListener('touchend', () => { isDraggingProtractor = false; });
+
+    // Water Volume Fill Slider
+    sliderFill.addEventListener('input', (e) => {
+      const pct = parseFloat(e.target.value);
+      SIM.fillFraction = pct / 100;
+      SIM.currentVolumeMl = SIM.initialCapacityMl * SIM.fillFraction;
+      document.getElementById('label-fill-pct').textContent = pct + '%';
+    });
+
+    // Liquid Opacity & Appearance Manager
+    const sliderOpacity = document.getElementById('slider-opacity');
+    const labelOpacityPct = document.getElementById('label-opacity-pct');
+
+    function updateLiquidAppearance() {
+      const l = SIM.liquids[SIM.currentLiquid];
+      const op = SIM.liquidOpacity; // 0.10 to 1.00
+      waterMaterial.color.setHex(l.color);
+      // Lower transmission and higher opacity make liquid much more solid and vibrant
+      waterMaterial.transmission = Math.max(0.0, (1.0 - op) * 0.85);
+      waterMaterial.opacity = THREE.MathUtils.clamp(0.45 + op * 0.55, 0.45, 1.0);
+      waterMaterial.roughness = l.roughness;
+      waterMaterial.ior = l.ior;
+      waterMaterial.needsUpdate = true;
+    }
+
+    if (sliderOpacity) {
+      sliderOpacity.addEventListener('input', (e) => {
+        const val = parseFloat(e.target.value);
+        SIM.liquidOpacity = val / 100;
+        if (labelOpacityPct) labelOpacityPct.textContent = val + '%';
+        updateLiquidAppearance();
+      });
+    }
+
+    // Liquid Type Buttons
+    document.querySelectorAll('.liquid-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.liquid-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+
+        const key = btn.dataset.liquid;
+        SIM.currentLiquid = key;
+        const l = SIM.liquids[key];
+        SIM.liquidViscosity = l.viscosity;
+        SIM.sloshDamping = l.damping;
+        updateLiquidAppearance();
+      });
+    });
+
+    // Refill Glass
+    function refillGlass() {
+      SIM.fillFraction = 0.75;
+      SIM.currentVolumeMl = SIM.initialCapacityMl * 0.75;
+      sliderFill.value = 75;
+      document.getElementById('label-fill-pct').textContent = '75%';
+      // Reset glass posture if slid or toppled
+      SIM.glassOffsetZ = 0.0;
+      SIM.glassVelocityZ = 0.0;
+      glassGroup.position.z = 0.0;
+      glassMesh.rotation.x = 0.0;
+      glassMesh.rotation.z = 0.0;
+      glassMesh.position.y = 0.0;
+      SIM.isToppled = false;
+      // Induce pleasant refill slosh
+      SIM.waterVelocity += 1.2;
+    }
+    document.getElementById('btn-refill').onclick = refillGlass;
+
+    // Wipe Desk Clean
+    document.getElementById('btn-dry-table').onclick = () => {
+      clearPuddleTexture();
+    };
+
+    // Toggles
+    document.getElementById('toggle-ice').addEventListener('change', (e) => {
+      SIM.hasIce = e.target.checked;
+    });
+
+    document.getElementById('toggle-slosh').addEventListener('change', (e) => {
+      SIM.hasSlosh = e.target.checked;
+    });
+
+    document.getElementById('toggle-helpers').addEventListener('change', (e) => {
+      SIM.hasHelpers = e.target.checked;
+    });
+
+    document.getElementById('toggle-rock').addEventListener('change', (e) => {
+      SIM.isAutoRocking = e.target.checked;
+    });
+
+    document.getElementById('toggle-slide').addEventListener('change', (e) => {
+      SIM.isSlidePhysicsEnabled = e.target.checked;
+      if (!e.target.checked) {
+        SIM.glassOffsetZ = 0.0;
+        SIM.glassVelocityZ = 0.0;
+        glassGroup.position.z = 0.0;
+        glassMesh.rotation.x = 0.0;
+        glassMesh.rotation.z = 0.0;
+        glassMesh.position.y = 0.0;
+        SIM.isToppled = false;
+      }
+    });
+
+    // Sound Toggle
+    const btnAudio = document.getElementById('btn-audio');
+    const audioIcon = document.getElementById('audio-icon');
+    btnAudio.onclick = () => {
+      const active = audio.toggle();
+      SIM.audioEnabled = active;
+      if (active) {
+        btnAudio.classList.add('active');
+        audioIcon.textContent = '🔊';
+      } else {
+        btnAudio.classList.remove('active');
+        audioIcon.textContent = '🔇';
+      }
+    };
+
+    // Camera Views
+    const camButtons = document.querySelectorAll('.cam-btn[data-cam]');
+    camButtons.forEach(btn => {
+      btn.addEventListener('click', () => {
+        camButtons.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        const mode = btn.dataset.cam;
+
+        if (mode === 'perspective') {
+          gsapMoveCamera(0, 3.2, 7.8, 0, 1.4, 0);
+        } else if (mode === 'ortho-side') {
+          // Pure orthogonal profile view along tilt axis to observe true horizontal level
+          gsapMoveCamera(8.5, 1.4, 0, 0, 1.4, 0);
+        } else if (mode === 'front') {
+          gsapMoveCamera(0, 1.4, 8.5, 0, 1.4, 0);
+        } else if (mode === 'top') {
+          gsapMoveCamera(0, 9.0, 0.01, 0, 1.4, 0);
+        }
+      });
+    });
+
+    document.getElementById('btn-recenter-cam').onclick = () => {
+      gsapMoveCamera(0, 3.2, 7.8, 0, 1.4, 0);
+    };
+
+    // Smooth Camera Transition Helper
+    function gsapMoveCamera(tx, ty, tz, lx, ly, lz) {
+      const startPos = camera.position.clone();
+      const endPos = new THREE.Vector3(tx, ty, tz);
+      const startLook = controls.target.clone();
+      const endLook = new THREE.Vector3(lx, ly, lz);
+
+      let t = 0;
+      const anim = () => {
+        t += 0.05;
+        const ease = t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
+        camera.position.lerpVectors(startPos, endPos, ease);
+        controls.target.lerpVectors(startLook, endLook, ease);
+        controls.update();
+        if (t < 1.0) requestAnimationFrame(anim);
+      };
+      anim();
+    }
+
+    // Direct 3D Raycasting / Dragging on the Table to Tilt
+    const raycaster = new THREE.Raycaster();
+    const mouse = new THREE.Vector2();
+    let isDraggingTableDirectly = false;
+    let dragStartY = 0;
+    let dragStartAngle = 0;
+
+    renderer.domElement.addEventListener('pointerdown', (e) => {
+      // Check if mouse clicked table top edge
+      mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+      mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+      raycaster.setFromCamera(mouse, camera);
+      const hits = raycaster.intersectObject(tableTopMesh);
+      if (hits.length > 0 && e.button === 0 && e.shiftKey) {
+        isDraggingTableDirectly = true;
+        dragStartY = e.clientY;
+        dragStartAngle = SIM.targetTiltAngle;
+        controls.enabled = false;
+      }
+    });
+
+    window.addEventListener('pointermove', (e) => {
+      if (isDraggingTableDirectly) {
+        const dy = e.clientY - dragStartY;
+        setTargetAngle(dragStartAngle + dy * 0.25);
+      }
+    });
+
+    window.addEventListener('pointerup', () => {
+      if (isDraggingTableDirectly) {
+        isDraggingTableDirectly = false;
+        controls.enabled = true;
+      }
+    });
+
+    // Window Resize Handler
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    // --- Main Animation & Physics Loop ---
+    let lastTime = performance.now();
+    let autoRockPhase = 0.0;
+
+    function animate(now) {
+      requestAnimationFrame(animate);
+
+      const dt = Math.min(0.05, (now - lastTime) / 1000);
+      lastTime = now;
+
+      // 1. Auto-Rock Table mode (smooth sinusoidal tilting)
+      if (SIM.isAutoRocking) {
+        autoRockPhase += dt * 1.5;
+        const waveAngle = Math.sin(autoRockPhase) * 28.0;
+        setTargetAngle(waveAngle, false);
+      }
+
+      // 2. Smoothly approach target desk angle with inertia
+      const prevAngle = SIM.currentTiltAngle;
+      SIM.currentTiltAngle = THREE.MathUtils.lerp(SIM.currentTiltAngle, SIM.targetTiltAngle, dt * 10.0);
+      SIM.tiltAngularVelocity = (SIM.currentTiltAngle - prevAngle) / dt;
+
+      // Apply tilt rotation to desk pivot (X-axis pitch rotation)
+      deskPivot.rotation.x = THREE.MathUtils.degToRad(SIM.currentTiltAngle);
+      if (typeof needlePivot !== 'undefined') {
+        needlePivot.rotation.x = -deskPivot.rotation.x;
+      }
+
+      // Update angle display
+      displayAngleVal.textContent = Math.abs(SIM.currentTiltAngle).toFixed(1);
+      drawProtractorDial();
+
+      // 3. Update Fluid & Sloshing Dynamics
+      updateWaterSimulation(dt);
+
+      // 4. Update Spilled Droplets
+      updateDroplets(dt);
+
+      // 5. Orbit Controls & Render
+      controls.update();
+      renderer.render(scene, camera);
+    }
+
+    // Initialize display dial and start loop
+    drawProtractorDial();
+    requestAnimationFrame(animate);
+  </script>
+</body>
+</html>
